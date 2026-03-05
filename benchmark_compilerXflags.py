@@ -25,7 +25,7 @@ HOW TO USE:
 4. Run:
       python3 benchmark_compiler_flags.py
 
-Results will be written to a CSV named <program>_compiler_flags.csv
+Results will be written to a CSV with descriptive name including compiler sets, flags, and dimension.
 ============================================================
 """
 
@@ -33,6 +33,7 @@ import subprocess
 import statistics
 import csv
 import sys
+import re
 from pathlib import Path
 
 # ==========================================================
@@ -40,10 +41,10 @@ from pathlib import Path
 # ==========================================================
 
 # Fixed program
-C_FILE = "matrixmult_library.c"
+C_FILE = "matrixmult_opt.c"
 
 # Fixed dimension(s)
-N_VALUE = 2000
+N_VALUE = 10000
 
 # Number of runs to average
 RUNS_PER_N = 1
@@ -86,7 +87,8 @@ class Compiler:
                 return binary
 
         # Normal compilation
-        binary_name = f"{source_file.stem}_{compiler}_" + "_".join(f.replace("-", "") for f in flags)
+        safe_flags = "_".join(f.replace("-", "") for f in flags)
+        binary_name = f"{source_file.stem}_{compiler}_{safe_flags}"
         binary = source_file.parent / binary_name
         print(f"[INFO] Compiling '{source_file}' with {compiler} flags {flags} -> '{binary}'")
         cmd = [compiler, str(source_file), "-o", str(binary)] + flags
@@ -159,15 +161,24 @@ class CSVWriter:
     """Writes results to CSV with compilers as rows, flags as columns."""
 
     @staticmethod
-    def write(filename, data, flags_list):
+    def write(program_file, n_value, compilers, flags_list, data):
+        # generate descriptive filename
+        program_stem = Path(program_file).stem
+        compilers_str = "_".join(compilers)
+        flags_str = "_".join("_".join(f).replace("-", "") for f in flags_list)
+        safe_flags_str = re.sub(r"[^\w]+", "_", flags_str)
+        output_csv = f"results|{program_stem}|n{n_value}|{compilers_str}|{safe_flags_str}.csv"
+
         headers = ["compiler"] + ["_".join(f).replace("-", "") for f in flags_list]
 
-        with open(filename, "w", newline="") as f:
+        with open(output_csv, "w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(headers)
             for compiler, times in data.items():
                 row = [compiler] + [times.get("_".join(f).replace("-", ""), "") for f in flags_list]
                 writer.writerow(row)
+
+        print(f"[INFO] CSV results written to '{output_csv}'")
 
 
 # ==========================================================
@@ -178,10 +189,8 @@ def main():
     print("[START] Benchmark process initiated...")
     benchmark = Benchmark(C_FILE, N_VALUE, RUNS_PER_N, COMPILERS, COMPILER_FLAGS_LIST)
     results = benchmark.run()
-
-    csv_file = f"{Path(C_FILE).stem}_compiler_flags.csv"
-    CSVWriter.write(csv_file, results, COMPILER_FLAGS_LIST)
-    print(f"[FINISH] Benchmark complete. Results saved to '{csv_file}'")
+    CSVWriter.write(C_FILE, N_VALUE, COMPILERS, COMPILER_FLAGS_LIST, results)
+    print("[FINISH] Benchmark complete.")
 
 
 if __name__ == "__main__":
