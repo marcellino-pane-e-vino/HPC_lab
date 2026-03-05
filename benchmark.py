@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ============================================================
-C Benchmark Framework with Absolute Paths
+C Benchmark Framework with Absolute Paths & Dynamic CSV
 ============================================================
 
 HOW TO USE:
@@ -17,13 +17,16 @@ HOW TO USE:
 3. Run:
       python3 benchmark.py
 
-Results will be written to results.csv
+Results will be written to a CSV whose name reflects the config.
 ============================================================
 """
 
 # ==========================================================
 # ================== CONFIGURATION =========================
 # ==========================================================
+
+import re
+from pathlib import Path
 
 C_FILES = [
     "matrixmult.c",
@@ -34,10 +37,16 @@ N_VALUES = [1000, 2000, 3000]
 
 RUNS_PER_N = 1
 
-OUTPUT_CSV = "results.csv"
-
 COMPILER = "gcc"
 COMPILER_FLAGS = ["-O3", "-lm"]
+
+# generate a safe, descriptive CSV filename
+file_stems = "_".join(Path(f).stem for f in C_FILES)
+n_values_str = "_".join(str(n) for n in N_VALUES)
+flags_str = "_".join(f.replace("-", "") for f in COMPILER_FLAGS)
+safe_flags_str = re.sub(r"[^\w]+", "_", flags_str)
+
+OUTPUT_CSV = f"results_{file_stems}_{n_values_str}_{safe_flags_str}.csv"
 
 # ==========================================================
 # ============== DO NOT MODIFY BELOW ======================
@@ -46,7 +55,6 @@ COMPILER_FLAGS = ["-O3", "-lm"]
 import subprocess
 import csv
 import statistics
-from pathlib import Path
 import sys
 import os
 
@@ -59,7 +67,7 @@ class _Compiler:
         binary = source_file.with_suffix("").resolve()  # absolute path to binary
         print(f"[INFO] Compiling '{source_file}' -> '{binary}' ...")
 
-        cmd = [COMPILER, str(source_file), "-o", str(binary), "-O3", "-lm"]
+        cmd = [COMPILER, str(source_file), "-o", str(binary)] + COMPILER_FLAGS
 
         try:
             subprocess.run(cmd, check=True, capture_output=True, text=True)
@@ -104,7 +112,7 @@ class _Executor:
 
 
 class _BenchmarkEngine:
-    """Core benchmarking logic (hidden from user)."""
+    """Core benchmarking logic."""
 
     def __init__(self, files, n_values, runs):
         self.files = files
