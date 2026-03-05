@@ -1,4 +1,4 @@
-#define n 5000
+//#define n 5000
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,6 +8,18 @@
 
 
 int main(int argc,char **argv) {
+   if (argc < 2) {
+        fprintf(stderr, "Error: missing n argument.\n");
+        fprintf(stderr, "Usage: %s <n>\n", argv[0]);
+        return 1;
+    }
+
+    int n = atoi(argv[1]);
+    if (n <= 0) {
+        fprintf(stderr, "Error: You forgot to provide n!.\n");
+        return 1;
+    }
+
   int i, j, k;
 
   double ( *a )[n] = malloc(sizeof(double[n][n]));
