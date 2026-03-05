@@ -12,9 +12,11 @@ HOW TO USE:
       - Print execution time like:
             Execution Time: X.XXXX seconds
 
-2. Edit ONLY the CONFIGURATION SECTION below.
+2. Place 'build_matrixmult.sh' in the same folder as 'matrixmult_library.c'.
 
-3. Run:
+3. Edit ONLY the CONFIGURATION SECTION below.
+
+4. Run:
       python3 benchmark.py
 
 Results will be written to a CSV whose name reflects the config.
@@ -31,6 +33,7 @@ from pathlib import Path
 C_FILES = [
     "matrixmult.c",
     "matrixmult_opt.c",
+    "matrixmult_library.c",  # Add your OpenBLAS version here
 ]
 
 N_VALUES = [1000, 2000, 3000]
@@ -64,11 +67,33 @@ class _Compiler:
 
     @staticmethod
     def compile(source_file: Path) -> Path:
-        binary = source_file.with_suffix("").resolve()  # absolute path to binary
+        # Absolute path to source file
+        source_file = source_file.resolve()
+
+        # Special case: use build script for matrixmult_library.c
+        if source_file.name == "matrixmult_library.c":
+            build_script = source_file.parent / "build_matrixmult.sh"
+            if not build_script.exists():
+                print(f"[ERROR] Build script not found: {build_script}")
+                sys.exit(1)
+            print(f"[INFO] Running build script for {source_file} ...")
+            try:
+                subprocess.run([str(build_script)], check=True)
+            except subprocess.CalledProcessError:
+                print(f"[ERROR] Build script failed for {source_file}")
+                sys.exit(1)
+            # The script creates 'matrixmult' executable in the same folder
+            binary = source_file.parent / "matrixmult"
+            if not binary.exists():
+                print(f"[ERROR] Expected executable not found: {binary}")
+                sys.exit(1)
+            print(f"[OK] Build script completed: {binary}")
+            return binary
+
+        # Default compilation for other C files
+        binary = source_file.with_suffix("").resolve()
         print(f"[INFO] Compiling '{source_file}' -> '{binary}' ...")
-
         cmd = [COMPILER, str(source_file), "-o", str(binary)] + COMPILER_FLAGS
-
         try:
             subprocess.run(cmd, check=True, capture_output=True, text=True)
             print(f"[OK] Compilation succeeded: {binary}")
@@ -78,7 +103,6 @@ class _Compiler:
             print(e.stdout)
             print(e.stderr)
             sys.exit(1)
-
         return binary
 
 
@@ -87,7 +111,7 @@ class _Executor:
 
     @staticmethod
     def run(binary: Path, n: int) -> float:
-        binary_path = str(binary.resolve())  # absolute path
+        binary_path = str(binary.resolve())
         print(f"[INFO] Running '{binary_path}' with n={n} ...")
         try:
             result = subprocess.run(
@@ -104,6 +128,7 @@ class _Executor:
         for line in result.stdout.splitlines():
             if "Execution Time" in line:
                 print(f"[INFO] Output received: {line.strip()}")
+                # Assumes format: Execution Time: X.XXXX seconds
                 return float(line.split()[-2])
 
         print(f"[ERROR] Execution time not found in output of {binary_path}")
@@ -123,13 +148,12 @@ class _BenchmarkEngine:
         results = {}
 
         for file in self.files:
-            source_path = Path(file).resolve()  # absolute path
+            source_path = Path(file).resolve()
             if not source_path.exists():
                 print(f"[ERROR] File not found: {file}")
                 sys.exit(1)
 
             print(f"\n[INFO] Benchmarking '{source_path}' ...")
-
             binary = _Compiler.compile(source_path)
             results[file] = self._benchmark_file(binary)
 
@@ -137,7 +161,6 @@ class _BenchmarkEngine:
 
     def _benchmark_file(self, binary):
         file_results = {}
-
         for n in self.n_values:
             print(f"[INFO] Starting {self.runs} run(s) for n={n} ...")
             timings = []
@@ -149,7 +172,6 @@ class _BenchmarkEngine:
 
             avg_time = statistics.mean(timings)
             file_results[n] = avg_time
-
             print(f"[OK] n={n:<6} avg_time={avg_time:.4f}s")
 
         return file_results
@@ -163,7 +185,6 @@ class _CSVWriter:
         print(f"[INFO] Writing results to '{filename}' ...")
         with open(filename, "w", newline="") as f:
             writer = csv.writer(f)
-
             writer.writerow(["file"] + n_values)
 
             for file, results in data.items():
