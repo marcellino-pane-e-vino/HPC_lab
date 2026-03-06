@@ -1,0 +1,24 @@
+Size (n): 8000
+Tile Size (B): 64
+
+
+Compiler: ICX
+Command Line: icx -O3 -march=native -lm matrixmult_opt_final.c -o Test
+
+B:16 - Execution Time: 94.6935 seconds
+B:32 - Execution Time: 53.9517 seconds
+B:64 - Execution Time: 41.8013 seconds
+B:128 - Execution Time: 68.2844 seconds
+B:256 - Execution Time: 64.6430 seconds
+
+
+
+Compiler: GCC
+Command Line: gcc -O3 -march=native -lm matrixmult_opt_final.c -o Test
+
+B:16 - Execution Time: 55.9008 seconds
+B:32 - Execution Time: 44.2042 seconds
+B:64 - Execution Time: 29.9423 seconds
+B:128 - Execution Time: 38.4085 seconds
+B:256 - Execution Time: 35.1694 seconds
+

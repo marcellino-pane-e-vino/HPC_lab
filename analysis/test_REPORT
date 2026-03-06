@@ -1,0 +1,241 @@
+SI: -march=native!!!
+
+Con -march=native, invece, dici al compilatore: 
+"Guarda esattamente che CPU ho sotto il cofano e usa ogni singola arma a sua disposizione".
+
+Ecco cosa succede nello specifico:
+
+1. Attivazione delle istruzioni SIMD (AVX/AVX2/AVX-512)
+I processori moderni hanno registri molto larghi (256 o 512 bit). Invece di moltiplicare un double alla volta, possono caricarne 4 o 8 contemporaneamente.
+
+Senza -march=native: Il compilatore usa istruzioni generiche (SSE) che sono meno esigenti sull'allineamento ma più lente.
+
+Con -march=native: Il compilatore attiva le istruzioni AVX. Queste istruzioni sono come "autostrade a 8 corsie": se le macchine (i dati) entrano tutte allineate (vmovapd), viaggiano a velocità folle. Se sono disallineate, il processore deve fare un lavoro extra di "riordino" che annulla il vantaggio.
+
+2. Perché aligned_alloc ora vince su malloc?
+Ora che il compilatore sta usando queste istruzioni "pesanti", l'allineamento diventa critico.
+
+Con malloc: Anche se l'indirizzo è spesso allineato, il compilatore non può esserne sicuro a priori. Per sicurezza, deve generare istruzioni di caricamento "prudente" (vmovupd), che gestiscono i dati come se fossero disallineati.
+
+Con aligned_alloc: Hai dato al compilatore la garanzia formale. Lui sa che può "spingere sull'acceleratore" usando le istruzioni di caricamento "veloce" (vmovapd).
+
+
+
+
+--------------------- NOTE ON CODE ---------------------
+
+// Starting point: sequential complexity is O(n^3)
+
+
+// Hint: To perform loop tiling, the loops have to be perfectly nested and a certain type of loops with loop-carried dependencies cannot be tiled.
+
+// Note:
+    // min(...): Se la tua matrice è $100 \times 100$ e il tuo blocco è $32$, 
+    // l'ultimo blocco inizierebbe a $96$ e finirebbe a $128$. 
+    // Il min serve a fermarsi a $100$ per evitare di leggere memoria fuori dai limiti (Segmentation Fault).
+
+
+    // Note: for (int k = kk; k < min(kk + B, n); k++)
+    // Questo è il segreto dell'efficienza: a[i][k] e b[k][j] rimangono in cache perché stiamo lavorando su un range di k molto piccolo.
+
+
+    // Note: c[i][j] += a[i][k] * b[k][j];
+    // Questa è l'operazione standard. 
+    // La differenza è che, grazie ai cicli sopra, quando il programma chiede al processore il valore di b[k][j], 
+    // è molto probabile che quel valore sia già nella Cache L1 (vicinissima al processore) 
+    // perché è stato usato un istante prima per il calcolo dell'elemento precedente del tile.
+
+
+
+
+
+
+
+
+
+
+
+********************** THEORY *************************
+Loop Tiling: L'obiettivo è suddividere le matrici in sottomatrici (tile) di dimensione $B \times B$ che possano risiedere interamente nella cache.
+
+
+Perché questa struttura è più efficiente?Nel tuo codice originale (l'ordine $i, k, j$ è già buono 
+perché favorisce il riuso di a[i][k]), il problema sorge con la matrice b[k][j]. 
+Quando $n$ è molto grande, ogni volta che il ciclo $k$ avanza, la riga di b caricata precedentemente 
+potrebbe essere già stata espulsa dalla cache.Con il tiling, ecco cosa cambia:
+
+- Località dei dati: Invece di scorrere tutta la riga $j$ (lunga $n$), ci fermiamo dopo $B$ elementi. 
+Il blocco di dati della matrice b rimane "caldo" nella cache mentre il ciclo $k$ itera.
+
+- Scomposizione del problema: I tre cicli esterni (ii, kk, jj) servono a navigare tra i blocchi, 
+mentre i tre cicli interni (i, k, j) eseguono la moltiplicazione standard ma solo su una piccola 
+porzione di dati che "fitta" nella cache L1 o L2.
+
+- Gestione dei bordi: L'uso della funzione min(ii + B, n) è fondamentale per gestire i casi in cui 
+la dimensione della matrice $n$ non sia un multiplo esatto della dimensione del tile $B$.
+
+
+
+
+Come scegliere la dimensione del Tile ($B$)?
+Per non dimenticare come calcolare $B$ in futuro, puoi usare questa logica:
+Idealmente, vogliamo che un tile di ogni matrice sia presente in cache contemporaneamente. 
+Se hai 3 matrici (A, B, C), la condizione approssimativa è:
+$$3 \times B^2 \times \text{dimensione\_dato} < \text{Dimensione Cache}$$
+
+Ad esempio, se ogni elemento è un double (8 byte) e hai una cache L1 di 32KB, 
+un valore di $B$ intorno a 32 è spesso un buon punto di partenza ($3 \times 32^2 \times 8 \approx 24KB$).
+
+
+
+Ecco i motivi principali per cui il secondo codice è 5 volte più veloce:
+
+1. Spostamento delle chiamate a fmin (Loop-Invariant Code Motion)
+Nel primo codice, fmin(ii + B, n) viene eseguita milioni di volte.
+
+Nel ciclo di j, il programma deve chiamare la funzione fmin a ogni singola iterazione.
+
+Anche se il risultato è sempre lo stesso per tutta la durata del blocco, il processore è costretto a saltare alla funzione fmin, fare il calcolo, gestire i tipi double e tornare indietro.
+
+Nel secondo codice, hai calcolato i_limit, k_limit e j_limit fuori dai cicli interni.
+Il processore ora confronta l'indice con una semplice variabile intera già pronta. Hai risparmiato milioni di chiamate a funzione inutili.
+
+2. Uso della variabile temp_a (Register Promotion)
+Questa è forse l'ottimizzazione più potente.
+
+Codice lento: c[i][j] += a[i][k] * b[k][j];
+Qui il programma deve accedere alla memoria per leggere a[i][k] ogni singola volta che il ciclo j avanza. Anche se a[i][k] non cambia mentre j scorre, il compilatore potrebbe non essere sicuro al 100% che sia sicuro tenerlo in un registro (per colpa del "pointer aliasing").
+
+Codice veloce: double temp_a = a[i][k];
+Forzi il processore a caricare il valore di A in un registro della CPU (la memoria più veloce in assoluto). Nel ciclo interno di j, il computer ora fa solo: RegistroA * ValoreB + ValoreC. Non deve più andare a cercare a[i][k] in memoria.
+
+3. Riduzione dei "Cast" e precisione
+Come dicevamo prima, fmin lavora con i double.
+
+Nel primo codice, a ogni iterazione il processore converte i tuoi indici int in double, calcola il minimo, e poi confronta.
+
+Nel secondo codice, facendo int j_limit = fmin(...), la conversione avviene una volta sola per blocco. Il loop interno lavora interamente con numeri interi puri.
+
+
+
+Il secondo codice è un'ottima implementazione di Loop Tiling + Loop Unrolling Manuale (grazie a temp_a). È così che si scrive codice ad alte prestazioni!
+
+
+
+Nella moltiplicazione di matrici $C = A \times B$, l'ordine dei tre cicli più interni è il fattore che determina il successo o il fallimento della cache. Esistono 6 combinazioni possibili ($ijk, ikj, jik, jki, kij, kji$).Per l'architettura dei processori moderni (che leggono la memoria in modo sequenziale per righe), la versione più efficiente è quella che hai scritto tu: l'ordine IKJ.Ecco perché:Matrice A (a[i][k]): Nel ciclo più interno ($j$), l'indice $i$ e $k$ sono fissi. a[i][k] viene caricato una sola volta in un registro (il tuo temp_a). Ottimale.Matrice C (c[i][j]): Nel ciclo più interno, l'indice $j$ scorre linearmente ($j, j+1, j+2 \dots$). Questo è l'ideale per la cache perché sfrutta la località spaziale.Matrice B (b[k][j]): Anche qui, $j$ scorre linearmente. Il processore può pre-caricare i dati (Prefetching) perché legge la riga di $B$ in ordine.La regola d'oro: Il ciclo più interno deve sempre scorrere sull'indice che rappresenta le colonne della matrice (l'indice più a destra, in questo caso $j$), in modo da leggere la memoria in modo contiguo.
+
+
+
+
+
+warning: loop not unroll-and-jammed: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering [-Wpass-failed=transform-warning]
+Eccoci di fronte a uno dei classici "muri di gomma" dei compilatori basati su LLVM! Questo messaggio di errore è una miniera d'oro per capire come ragiona la macchina e fissa un concetto fondamentale che non dimenticherai: il compilatore ha l'ultima parola sulla sicurezza della memoria.
+
+Il messaggio the optimizer was unable to perform the requested transformation ci dice che ICX ha letto il tuo #pragma, ha provato ad applicarlo, ma poi si è spaventato e ha annullato l'operazione.
+
+Perché ICX si rifiuta di farlo?
+La risposta sta nell'ultima parte dell'errore: unsupported transformation ordering. Questo si ricollega esattamente a quello che abbiamo scoperto leggendo il report di GCC.
+
+Il problema dell'ordine (Phase Ordering): Ricordi i famosi Guard hoisted di GCC? GCC aveva prima estratto i controlli min() fuori dai cicli, semplificando la forma del loop, e poi aveva applicato l'Unroll and Jam. ICX, invece, sta cercando di fare l'Unroll and Jam mentre la logica dei limiti (i_limit, ecc.) è ancora "incastrata" in modo complesso nella sua rappresentazione interna. Non riuscendo a risolvere i confini esatti del ciclo, si arrende.
+
+I limiti dinamici e i VLA: Stai usando array a dimensione variabile (VLA) in stile C99: double (*a)[n]. Poiché n è una variabile letta a runtime (atoi(argv[1])), il compilatore non sa quanto è larga la riga. Srotolare il ciclo i significa chiedere alla CPU di calcolare i e i+1 contemporaneamente. LLVM teme che, calcolando i+1, potrebbe accidentalmente sforare la riga o la memoria allocata se i calcoli di i_limit non sono perfetti, causando un Segmentation Fault. Quindi sceglie la via conservativa: ignora il pragma.
+
+
+
+
+
+La conclusione definitiva su GCC vs ICX
+Questo esperimento fallito chiude il cerchio e ci dà la risposta finale al tuo dubbio iniziale:
+
+Tu hai scritto un ottimo codice: Il tuo codice di partenza con il Loop Tiling (B=64) è già eccellente e pulito.
+
+GCC ha l'euristica vincente qui: Sul tuo specifico hardware, l'ottimizzatore a grafo di GCC riconosce il tuo blocco pulito, sa esattamente come tradurlo in un Unroll and Jam a livello di registri, e ti porta a 7 secondi.
+
+ICX non è flessibile su questo pattern: Il compilatore Intel ha euristiche fortissime, ma se il codice non si incastra perfettamente nella sua idea di come dovrebbe essere scritto un ciclo (o se ti ostini a non usare le librerie Intel MKL), si rifiuta di fare trasformazioni aggressive. E se provi a forzarlo a mano nel C (come abbiamo appena fatto), si rompe del tutto.
+
+
+
+
+
+------------------------- IMPORTANT!!!! -------------------------
+Analisi Comparativa delle Euristiche di Ottimizzazione: GCC vs ICX in Moltiplicazione Matriciale con Tiling1. Introduzione e ContestoL'analisi valuta l'efficienza dei compilatori GCC (GNU Compiler Collection) e ICX (Intel oneAPI DPC++/C++ Compiler) nell'ottimizzare un algoritmo di moltiplicazione di matrici quadrate ($C = A \times B$) implementato con la tecnica del Loop Tiling (Block Matrix Multiplication). A parità di flag di ottimizzazione massimale (-O3 -march=native), si è osservato un divario prestazionale significativo a favore di GCC. L'esame dei report di ottimizzazione (-fopt-info-all per GCC e -qopt-report=3 per ICX) permette di isolare le precise scelte euristiche responsabili di tale discrepanza.2. Livello di Base: Vettorizzazione SIMD EquivalenteUna lettura superficiale potrebbe suggerire che ICX abbia fallito la vettorizzazione. I report dimostrano il contrario: entrambi i compilatori hanno correttamente mappato il calcolo del ciclo più interno sull'architettura hardware sottostante.Evidenza GCC: matrixmult_opt_final.c:70:40: optimized: loop vectorized using 32 byte vectorsEvidenza ICX: remark #15300: LOOP WAS VECTORIZED e remark #15305: vectorization support: vector length 4Entrambi hanno generato istruzioni vettoriali a 256-bit (32 byte), impacchettando 4 variabili di tipo double per iterazione (probabilmente sfruttando il set di istruzioni AVX2). Il divario prestazionale non risiede quindi nella capacità di vettorizzare, ma nella gestione della gerarchia di memoria e del flusso di controllo circostante.3. Fattore Critico: Trasformazioni Strutturali Avanzate (Unroll and Jam)La differenza sostanziale e dimostrabile tra i due compilatori risiede nell'applicazione delle Loop Transformations.L'approccio aggressivo di GCC:Il report di GCC evidenzia la chiave delle sue prestazioni alla riga 68:matrixmult_opt_final.c:68:36: optimized: applying unroll and jam with factor 2L'ottimizzatore a grafo di GCC ha riconosciuto che vettorizzare semplicemente il ciclo interno non era sufficiente a causa del "Memory Wall". Ha quindi srotolato (unroll) il ciclo immediatamente superiore e lo ha fuso (jam) con quello interno. Questa manovra dimezza i caricamenti ridondanti dalla memoria principale (Memory Loads), permettendo alla CPU di mantenere i dati della matrice $A$ nei registri per calcolare simultaneamente più righe della matrice $C$.La rinuncia di ICX per via del Cost Model:ICX, basato su LLVM, utilizza un Cost Model molto più rigido riguardo all'analisi dei puntatori (Alias Analysis) e degli stride di memoria.remark #15553: loop was not vectorized: outer loop is not an auto-vectorization candidate.La presenza di Variable Length Arrays (VLA), dichiarati come puntatori a matrici dinamiche (double (*a)[n]), introduce uno "stride dinamico". Non conoscendo il valore di $n$ a tempo di compilazione, ICX valuta il rischio di applicare trasformazioni profonde sui cicli esterni come troppo elevato (potenziale page fault o cache thrashing). Pertanto, etichetta i cicli esterni come "non candidati", rinunciando alla tecnica dell'Unroll and Jam ed esponendo la CPU a un numero doppio di accessi in memoria rispetto all'eseguibile compilato con GCC.4. Gestione dell'Overhead Dinamico (Guard Hoisting)L'algoritmo di Tiling richiede un continuo calcolo dei limiti dei blocchi per gestire le frange (tramite la macro min()). Questo introduce un potenziale overhead condizionale all'interno dei cicli caldi.La pulizia del grafo in GCC:Il report di GCC mostra un'ottimizzazione chirurgica del flusso di controllo:matrixmult_opt_final.c:68:36: optimized: Guard hoisted (ripetuto decine di volte per i vari cicli)GCC ha estratto ("hoisted") le espressioni condizionali e le dipendenze dinamiche della macro min(), spostandole nell'intestazione (preheader) dei cicli esterni. La CPU esegue i cicli caldi senza interruzioni di branching.Mancanza di sollevamento esplicito in ICX:Nel report di Inlining di ICX, le chiamate a llvm.smin.i32 figurano come funzioni "DELETE" (ovvero, espanse in linea), ma non si ha evidenza testuale nel report dei loop di un massiccio Guard Hoisting. I controlli per i margini dei Tile vengono eseguiti con una granularità inferiore, contribuendo al micro-rallentamento ad ogni iterazione di blocco.5. Sintesi e ConclusioneIl vantaggio competitivo di GCC sull'algoritmo analizzato è radicato nella sua flessibilità euristica. Mentre ICX richiede un codice strutturalmente "piatto" (es. array monodimensionali espliciti) per garantire matematicamente l'indipendenza della memoria e applicare ottimizzazioni multilivello, GCC riesce ad applicare trasformazioni determinanti, come l'Unroll and Jam e il Guard Hoisting, anche in presenza di strutture dati con stride dinamico come i VLA bidimensionali. Il cronometro non premia il compilatore con le istruzioni SIMD migliori, ma quello che è riuscito ad alimentare tali istruzioni nascondendo le latenze della memoria.
+
+
+
+
+------------------------- IMPORTANT!!!! (temp case)-------------------------
+TEST CONFERMATI
+- CASO NULLO: MEGLIO CON TEMP PER TECNICA DI REGISTRI
+- CASO -O3: NESSUNA VARIAZIONE IN QUANTO LO FA IN AUTOMATICO
+- PER ICX NON CAMBIA NULLA PERCHE LUI PARTE OTTIMIZZATO CON DI DEFAULT IDEALMENTE (-O2)
+Caso 1: Compilazione SENZA ottimizzazioni (flag -O0)
+Se compili il codice omettendo i flag di ottimizzazione (che di default su GCC corrisponde a -O0), noterai una differenza di prestazioni gigantesca a favore del secondo snippet.
+
+Nel primo snippet: Ad ogni singolo giro del ciclo j, il programma ordina alla CPU di ricalcolare l'indirizzo di memoria della matrice a, di andare a cercare la riga i, la colonna k e di estrarre il valore. Questo genera milioni di letture in memoria (o in cache) totalmente inutili e ridondanti.
+
+Nel secondo snippet (con temp_a): Leggi il valore dalla memoria una volta sola prima che inizi il ciclo j. Lo salvi in temp_a (che la CPU terrà a portata di mano, probabilmente nello stack primario o in un registro). Il ciclo interno dovrà solo macinare la moltiplicazione, correndo molto più veloce.
+
+Caso 2: Compilazione CON ottimizzazioni (flag -O2 o -O3)
+Se compili usando -O3 (come abbiamo fatto nei nostri test precedenti), noterai esattamente zero differenze sul cronometro. I due codici impiegheranno lo stesso identico tempo.
+
+Il motivo è che il compilatore, leggendo il primo snippet, esegue un'analisi del codice:
+
+Vede a[i][k] dentro il ciclo j.
+
+Si accorge che i e k non variano rispetto a j.
+
+Applica automaticamente la Loop-Invariant Code Motion, estraendo lui stesso la lettura di a[i][k] fuori dal ciclo j e mettendola in un registro della CPU.
+
+Di fatto, a livello di linguaggio macchina (Assembly), GCC e ICX trasformano il tuo primo snippet in modo che assomigli esattamente al secondo snippet prima ancora di eseguirlo.
+
+
+
+
+
+
+
+------------------------- IMPORTANT!!!! (ALIGNED CASE)-------------------------
+CASI CONFERMATI E TESTATI, SIA PER GCC CHE PER ICX
+CASO SENZA OPTIMIZATION: ALIGNED IS BETTER!
+CASO CON OPTIMIZATION (-O3): ALIGNED IS ALWAYS BETTER!
+
+
+
+------------------------- OPENMP -------------------------------
+
+Perché 16 thread è il tuo numero perfetto
+La moltiplicazione di matrici è un calcolo pesantissimo. Non c'è un momento in cui l'acqua deve bollire; il cuoco sta tritando la carne ininterrottamente dall'inizio alla fine usando le istruzioni vettoriali (SIMD).
+
+Quando usi 16 thread: OpenMP assegna un thread a ciascuno dei tuoi 16 core fisici veri (8 P-Core e 8 E-Core). Hai 16 mani reali che lavorano al 100%. Prestazioni massime.
+
+Quando usi 24 thread: Stai dicendo agli 8 P-Core di seguire "due ricette contemporaneamente" (attivando i restanti 8 thread logici). Ma le unità matematiche dei P-Core sono già sature al 100% per eseguire il primo calcolo! I thread extra non aggiungono vera potenza fisica, si mettono solo in coda aspettando che l'unità matematica si liberi, aggiungendo traffico e overhead.
+
+
+
+------------------------- RESULTS -------------------------
+
+Tile size (test with n=8000) - ICX
+- B = 16: Execution Time: 79.5657 seconds
+- B = 32: Execution Time: 51.4952 seconds
+- B = 64: Execution Time: 42.5582 seconds
+- B = 128: Execution Time: 39.8481 seconds
+- B = 256: Execution Time: 39.7444 seconds
+- B = 512: Execution Time: 65.8783 seconds
+
+Tile size (test with n=8000) - GCC
+- B = 16: Execution Time: 53.2994 seconds
+- B = 32: Execution Time: 42.2490 seconds
+- B = 64: Execution Time: 30.1920 seconds
+- B = 128: Execution Time: 38.4179 seconds
+- B = 256: Execution Time: 35.1653 seconds
+- B = 512: Execution Time: 64.5872 seconds
+
+Tile size (test with n=8000) - ICC
+- B = 16: Execution Time: 100.6326 seconds
+- B = 32: Execution Time: 63.7045 seconds
+- B = 64: Execution Time: 54.2989 seconds
+- B = 128: Execution Time: 58.5766 seconds
+- B = 256: Execution Time: 50.3096 seconds
+- B = 512: Execution Time: 72.7493 seconds
+
+"Dai benchmark effettuati su matrice 8000x8000, ho evinto che il compilatore GCC genera il codice Assembly più efficiente per questa architettura, trovando l'ottimo locale a B=64 (saturazione Cache L1). Il compilatore ICX preferisce B=256 (saturazione Cache L2) a causa della sua diversa strategia di vettorizzazione, ma produce comunque un tempo di esecuzione assoluto superiore. Pertanto, ho impostato B=64 come valore di default, mantenendo la flessibilità tramite riga di comando."
