@@ -44,7 +44,7 @@ from pathlib import Path
 C_FILE = "matrixmult_opt.c"
 
 # Fixed dimension(s)
-N_VALUE = 10000
+N_VALUE = 8000
 
 # Number of runs to average
 RUNS_PER_N = 1
@@ -54,8 +54,9 @@ COMPILERS = ["gcc", "icc", "icx"]
 
 # Columns: sets of compiler flags to test
 COMPILER_FLAGS_LIST = [
-    ["-O2", "-lm"],
-    ["-O3", "-lm"],
+    ["-lm", "-march=native"],
+    ["-O1", "-lm", "-march=native"],
+    ["-O2", "-lm", "-march=native"],
     ["-O3", "-lm", "-march=native"]
 ]
 
