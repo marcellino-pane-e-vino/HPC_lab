@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 """
 ============================================================
-C Benchmark Framework: Compiler vs Flags
+C Benchmark Framework: Compiler vs Flags (Improved)
 ============================================================
 
 Benchmark a single C program across:
 - different compilers (rows)
 - different compiler flag sets (columns)
 
-Fixed program and fixed dimension(s).
+Includes:
+- Absolute paths
+- Automatic CSV output folder
+- icx compiler support
+- Executable permission fixes for build scripts
 
 HOW TO USE:
-
 1. Ensure your C program:
       - Accepts n as command line argument:
             int n = atoi(argv[1]);
@@ -25,7 +28,7 @@ HOW TO USE:
 4. Run:
       python3 benchmark_compiler_flags.py
 
-Results will be written to a CSV with descriptive name including compiler sets, flags, and dimension.
+Results will be written to a CSV inside 'benchmarks/' folder.
 ============================================================
 """
 
@@ -34,31 +37,27 @@ import statistics
 import csv
 import sys
 import re
+import os
 from pathlib import Path
 
 # ==========================================================
 # ================== CONFIGURATION =========================
 # ==========================================================
 
-# Fixed program
-C_FILE = "matrixmult_opt.c"
-
-# Fixed dimension(s)
-N_VALUE = 8000
-
-# Number of runs to average
-RUNS_PER_N = 1
-
-# Rows: compilers to test
-COMPILERS = ["gcc", "icc", "icx"]
-
-# Columns: sets of compiler flags to test
-COMPILER_FLAGS_LIST = [
+C_FILE = "matrixmult_opt.c"  # Fixed program
+N_VALUE = 5000               # Fixed dimension(s)
+RUNS_PER_N = 1               # Number of runs to average
+COMPILERS = ["gcc", "icc", "icx"]  # Rows: compilers to test
+COMPILER_FLAGS_LIST = [             # Columns: sets of compiler flags
     ["-lm", "-march=native"],
     ["-O1", "-lm", "-march=native"],
     ["-O2", "-lm", "-march=native"],
     ["-O3", "-lm", "-march=native"]
 ]
+
+# Output folder
+OUTPUT_FOLDER = Path(__file__).parent / "benchmarks"
+OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
 
 # ==========================================================
 # ============== DO NOT MODIFY BELOW ======================
@@ -74,32 +73,66 @@ class Compiler:
         # Special case: build script for matrixmult_library.c
         if source_file.name == "matrixmult_library.c":
             build_script = source_file.parent / "build_matrixmult.sh"
-            if build_script.exists():
-                print(f"[INFO] Running build script for {source_file} ...")
+            if not build_script.exists():
+                print(f"[ERROR] Build script not found: {build_script}")
+                sys.exit(1)
+
+            if not os.access(build_script, os.X_OK):
+                print(f"[INFO] Build script not executable. Fixing permissions...")
                 try:
-                    subprocess.run([str(build_script)], check=True)
-                except subprocess.CalledProcessError:
-                    print(f"[ERROR] Build script failed for {source_file}")
+                    os.chmod(build_script, 0o755)
+                except Exception as e:
+                    print(f"[ERROR] Failed to set execute permission: {e}")
                     sys.exit(1)
-                binary = source_file.parent / "matrixmult"
-                if not binary.exists():
-                    print(f"[ERROR] Expected executable not found: {binary}")
-                    sys.exit(1)
-                return binary
+
+            print(f"[INFO] Running build script for {source_file} ...")
+            try:
+                subprocess.run([str(build_script)], check=True)
+            except subprocess.CalledProcessError:
+                print(f"[ERROR] Build script failed for {source_file}")
+                sys.exit(1)
+
+            binary = source_file.parent / "matrixmult"
+            if not binary.exists():
+                print(f"[ERROR] Expected executable not found: {binary}")
+                sys.exit(1)
+
+            print(f"[OK] Build script completed: {binary}")
+            return binary
 
         # Normal compilation
         safe_flags = "_".join(f.replace("-", "") for f in flags)
         binary_name = f"{source_file.stem}_{compiler}_{safe_flags}"
-        binary = source_file.parent / binary_name
+        binary = OUTPUT_FOLDER / binary_name
         print(f"[INFO] Compiling '{source_file}' with {compiler} flags {flags} -> '{binary}'")
+
         cmd = [compiler, str(source_file), "-o", str(binary)] + flags
+
         try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            if compiler == "icx" or compiler == "icc" :
+                compile_command = " ".join(cmd)
+                subprocess.run(
+                    [
+                        "bash",
+                        "-c",
+                        f"source /opt/intel/oneapi/setvars.sh > /dev/null 2>&1 && {compile_command}"
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True
+                )
+            else:
+                subprocess.run(cmd, check=True, capture_output=True, text=True)
+
+            print(f"[OK] Compilation succeeded: {binary}")
+
         except subprocess.CalledProcessError as e:
             print(f"[ERROR] Compilation failed for {source_file} with {compiler}")
+            print("[COMPILER OUTPUT]")
             print(e.stdout)
             print(e.stderr)
             sys.exit(1)
+
         return binary
 
 
@@ -108,19 +141,21 @@ class Executor:
 
     @staticmethod
     def run(binary: Path, n: int) -> float:
-        print(f"[INFO] Running '{binary}' with n={n}")
+        binary_path = str(binary.resolve())
+        print(f"[INFO] Running '{binary_path}' with n={n}")
         try:
-            result = subprocess.run([str(binary), str(n)],
+            result = subprocess.run([binary_path, str(n)],
                                     capture_output=True, text=True, check=True)
         except subprocess.CalledProcessError:
-            print(f"[ERROR] Execution failed for {binary}")
+            print(f"[ERROR] Execution failed for {binary_path}")
             sys.exit(1)
 
         for line in result.stdout.splitlines():
             if "Execution Time" in line:
+                print(f"[INFO] Output received: {line.strip()}")
                 return float(line.split()[-2])
 
-        print(f"[ERROR] Execution time not found in output of {binary}")
+        print(f"[ERROR] Execution time not found in output of {binary_path}")
         sys.exit(1)
 
 
@@ -163,12 +198,11 @@ class CSVWriter:
 
     @staticmethod
     def write(program_file, n_value, compilers, flags_list, data):
-        # generate descriptive filename
         program_stem = Path(program_file).stem
         compilers_str = "_".join(compilers)
         flags_str = "_".join("_".join(f).replace("-", "") for f in flags_list)
         safe_flags_str = re.sub(r"[^\w]+", "_", flags_str)
-        output_csv = f"results|{program_stem}|n{n_value}|{compilers_str}|{safe_flags_str}.csv"
+        output_csv = OUTPUT_FOLDER / f"results|{program_stem}|n{n_value}|{compilers_str}|{safe_flags_str}.csv"
 
         headers = ["compiler"] + ["_".join(f).replace("-", "") for f in flags_list]
 
