@@ -3,26 +3,6 @@
 ============================================================
 C Benchmark Framework with Absolute Paths & Dynamic CSV
 ============================================================
-
-HOW TO USE:
-
-1. Make sure your C programs:
-   - Accept n as command line argument:
-     int n = atoi(argv[1]);
-
-   - Print execution time like:
-     Execution Time: X.XXXX seconds
-
-2. Place 'build_matrixmult.sh' in the same folder as
-   'matrixmult_library.c'.
-
-3. Edit ONLY the CONFIGURATION SECTION below.
-
-4. Run:
-   python3 benchmark.py
-
-Results will be written to a CSV whose name reflects the config.
-============================================================
 """
 
 # ==========================================================
@@ -34,17 +14,16 @@ from pathlib import Path
 
 C_FILES = [
     #"matrixmult.c",
-    "matrixmult_opt.c",
-    "matrixmult_opt|NOALIGN.c",
+    #"matrixmult_opt.c",
+    #"matrixmult_opt_NOALIGN.c",
     "matrixmult_library.c"
-    # Add your OpenBLAS version here
 ]
 
 N_VALUES = [1000, 2000, 3000, 5000, 10000]
 
 RUNS_PER_N = 1
 
-COMPILER = "gcc"
+COMPILER = "icx"
 
 COMPILER_FLAGS = [
     "-O3",
@@ -52,7 +31,6 @@ COMPILER_FLAGS = [
     "-march=native"
 ]
 
-# generate a safe, descriptive CSV filename
 file_stems = "_".join(Path(f).stem for f in C_FILES)
 n_values_str = "_".join(str(n) for n in N_VALUES)
 flags_str = "_".join(f.replace("-", "") for f in COMPILER_FLAGS)
@@ -88,6 +66,16 @@ class _Compiler:
                 print(f"[ERROR] Build script not found: {build_script}")
                 sys.exit(1)
 
+            # ---- NEW: ensure script is executable ----
+            if not os.access(build_script, os.X_OK):
+                print(f"[INFO] Build script not executable. Fixing permissions...")
+                try:
+                    os.chmod(build_script, 0o755)
+                except Exception as e:
+                    print(f"[ERROR] Failed to set execute permission: {e}")
+                    sys.exit(1)
+            # ------------------------------------------
+
             print(f"[INFO] Running build script for {source_file} ...")
 
             try:
@@ -113,7 +101,6 @@ class _Compiler:
 
         try:
 
-            # If using icx, source oneAPI environment first
             if COMPILER == "icx":
 
                 compile_command = " ".join(cmd)
@@ -265,10 +252,6 @@ class _CSVWriter:
 
         print(f"[OK] CSV file saved: '{filename}'")
 
-
-# ==========================================================
-# ====================== MAIN ==============================
-# ==========================================================
 
 def main():
 
