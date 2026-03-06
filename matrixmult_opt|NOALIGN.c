@@ -29,7 +29,7 @@ int main(int argc,char **argv) {
     
     int i, j, k;
 
-    
+    /*
     size_t alignment = 64;
     size_t matrix_size = sizeof(double[n][n]);
     double (*a)[n] = aligned_alloc(alignment, matrix_size);
@@ -40,12 +40,12 @@ int main(int argc,char **argv) {
     if (matrix_size % alignment != 0) {
         matrix_size = ((matrix_size / alignment) + 1) * alignment;
     }
+    */
     
-    /*
     double (*a)[n] = malloc(sizeof(double[n][n]));
     double (*b)[n] = malloc(sizeof(double[n][n]));
     double (*c)[n] = malloc(sizeof(double[n][n]));
-    */
+    
 
     // Initialization
     for (i=0; i<n; i++)
@@ -68,12 +68,14 @@ int main(int argc,char **argv) {
             k_limit = min(kk + B, n);
             for (jj = 0; jj < n; jj += B) {     // Along columns of C and B
                 j_limit = min(jj + B, n);
+                
                 // Internal loops: within the single Tile (Block)
                 for (i = ii; i < i_limit; i++) {            // Along the rows of the current block
                     for (k = kk; k < k_limit; k++) {        // Efficiency: along the elements needed for the scalar product but only for the width of the tile B
-                        double temp_a = a[i][k]; 
+                        //double temp_a = a[i][k]; 
                         for (j = jj; j < j_limit; j++) {    // Along the columns of the current block
-                            c[i][j] += temp_a * b[k][j];
+                            //c[i][j] += temp_a * b[k][j];
+                            c[i][j] += a[i][k] * b[k][j];
                         }
                     }
                 }
