@@ -11,11 +11,12 @@ C Benchmark Framework with Absolute Paths & Dynamic CSV
 
 import re
 from pathlib import Path
+import os
 
 C_FILES = [
     #"matrixmult.c",
-    #"matrixmult_opt.c",
-    #"matrixmult_opt_NOALIGN.c",
+    "matrixmult_opt.c",
+    "matrixmult_opt_NOALIGN.c",
     "matrixmult_library.c"
 ]
 
@@ -23,7 +24,7 @@ N_VALUES = [1000, 2000, 3000, 5000, 10000]
 
 RUNS_PER_N = 1
 
-COMPILER = "icx"
+COMPILER = "gcc"
 
 COMPILER_FLAGS = [
     "-O3",
@@ -31,12 +32,16 @@ COMPILER_FLAGS = [
     "-march=native"
 ]
 
+# create output folder "benchmarks" in the same folder as the script
+output_folder = Path(__file__).parent / "benchmarks"
+output_folder.mkdir(parents=True, exist_ok=True)
+
 file_stems = "_".join(Path(f).stem for f in C_FILES)
 n_values_str = "_".join(str(n) for n in N_VALUES)
 flags_str = "_".join(f.replace("-", "") for f in COMPILER_FLAGS)
 safe_flags_str = re.sub(r"[^\w]+", "_", flags_str)
 
-OUTPUT_CSV = f"results|{COMPILER}|{file_stems}|{n_values_str}|{safe_flags_str}.csv"
+OUTPUT_CSV = output_folder / f"results|{COMPILER}|{file_stems}|{n_values_str}|{safe_flags_str}.csv"
 
 # ==========================================================
 # ============== DO NOT MODIFY BELOW ======================
@@ -46,7 +51,6 @@ import subprocess
 import csv
 import statistics
 import sys
-import os
 
 
 class _Compiler:
@@ -57,7 +61,6 @@ class _Compiler:
 
         source_file = source_file.resolve()
 
-        # Special case: use build script for matrixmult_library.c
         if source_file.name == "matrixmult_library.c":
 
             build_script = source_file.parent / "build_matrixmult.sh"
@@ -66,7 +69,6 @@ class _Compiler:
                 print(f"[ERROR] Build script not found: {build_script}")
                 sys.exit(1)
 
-            # ---- NEW: ensure script is executable ----
             if not os.access(build_script, os.X_OK):
                 print(f"[INFO] Build script not executable. Fixing permissions...")
                 try:
@@ -74,7 +76,6 @@ class _Compiler:
                 except Exception as e:
                     print(f"[ERROR] Failed to set execute permission: {e}")
                     sys.exit(1)
-            # ------------------------------------------
 
             print(f"[INFO] Running build script for {source_file} ...")
 
@@ -102,9 +103,7 @@ class _Compiler:
         try:
 
             if COMPILER == "icx":
-
                 compile_command = " ".join(cmd)
-
                 subprocess.run(
                     [
                         "bash",
@@ -117,7 +116,6 @@ class _Compiler:
                 )
 
             else:
-
                 subprocess.run(
                     cmd,
                     check=True,
@@ -148,7 +146,6 @@ class _Executor:
         print(f"[INFO] Running '{binary_path}' with n={n} ...")
 
         try:
-
             result = subprocess.run(
                 [binary_path, str(n)],
                 capture_output=True,
@@ -157,17 +154,13 @@ class _Executor:
             )
 
         except subprocess.CalledProcessError:
-
             print(f"[ERROR] Execution failed for {binary_path} with n={n}")
             print("Check your C program for runtime errors.")
             sys.exit(1)
 
         for line in result.stdout.splitlines():
-
             if "Execution Time" in line:
-
                 print(f"[INFO] Output received: {line.strip()}")
-
                 return float(line.split()[-2])
 
         print(f"[ERROR] Execution time not found in output of {binary_path}")
@@ -184,49 +177,29 @@ class _BenchmarkEngine:
         self.runs = runs
 
     def run(self):
-
         results = {}
-
         for file in self.files:
-
             source_path = Path(file).resolve()
-
             if not source_path.exists():
                 print(f"[ERROR] File not found: {file}")
                 sys.exit(1)
-
             print(f"\n[INFO] Benchmarking '{source_path}' ...")
-
             binary = _Compiler.compile(source_path)
-
             results[file] = self._benchmark_file(binary)
-
         return results
 
     def _benchmark_file(self, binary):
-
         file_results = {}
-
         for n in self.n_values:
-
             print(f"[INFO] Starting {self.runs} run(s) for n={n} ...")
-
             timings = []
-
             for run_idx in range(1, self.runs + 1):
-
                 print(f"[INFO] Run {run_idx}/{self.runs} ...")
-
                 t = _Executor.run(binary, n)
-
                 timings.append(t)
-
             avg_time = statistics.mean(timings)
-
             file_results[n] = avg_time
-
             print(f"[OK] n={n:<6} avg_time={avg_time:.4f}s")
-
         return file_results
 
 
@@ -235,34 +208,21 @@ class _CSVWriter:
 
     @staticmethod
     def write(filename, data, n_values):
-
         print(f"[INFO] Writing results to '{filename}' ...")
-
         with open(filename, "w", newline="") as f:
-
             writer = csv.writer(f)
-
             writer.writerow(["file"] + n_values)
-
             for file, results in data.items():
-
                 row = [file] + [results[n] for n in n_values]
-
                 writer.writerow(row)
-
         print(f"[OK] CSV file saved: '{filename}'")
 
 
 def main():
-
     print("[START] Benchmark process initiated...\n")
-
     engine = _BenchmarkEngine(C_FILES, N_VALUES, RUNS_PER_N)
-
     results = engine.run()
-
     _CSVWriter.write(OUTPUT_CSV, results, N_VALUES)
-
     print(f"\n[FINISH] Benchmark complete. Results saved to '{OUTPUT_CSV}'")
 
 
