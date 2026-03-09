@@ -5,48 +5,13 @@ Di seguito sono elencate le metriche e i calcoli di confronto principali estratt
 1. Metriche Core di Performance Parallela
 Queste metriche definiscono quanto bene il programma scala all'aumentare delle risorse computazionali (p processori/core):
 
-    Speedup (Aumento di velocità): È il rapporto tra il tempo di esecuzione sequenziale T(n,1) e il tempo di esecuzione parallelo T(n,p) per un problema di dimensione n
-
-.
-
-    Calcolo: S(n,p)=T(n,p)T(n,1)​
-
-.
-Nel report, confronta lo speedup ottenuto con lo speedup lineare ideale (S=p) e discuti eventuali deviazioni dovute a overhead di comunicazione o squilibrio del carico (load imbalance)
-
-    .
-
-Efficienza: Misura la frazione di tempo in cui le risorse sono utilizzate produttivamente
-.
-
-    Calcolo: E(n,p)=pS(n,p)​
-
-.
-Un'efficienza vicina a 1 (o 100%) indica un ottimo utilizzo dell'hardware
-
-        .
-
-2. Analisi della Scalabilità
-È necessario distinguere tra due tipi di test per mostrare la robustezza dell'ottimizzazione
-:
-
-    Strong Scaling (Scalabilità forte): Aumenta il numero di processori mantenendo fissa la dimensione totale del problema. L'obiettivo è ridurre il tempo totale di esecuzione
-
-.
-Weak Scaling (Scalabilità debole): Aumenta il numero di processori mantenendo fisso il carico di lavoro per ogni processore. L'obiettivo è risolvere problemi più grandi nello stesso lasso di tempo
-
-    .
-
-3. Metriche di Throughput e Calcolo Astratto
-
-    GFLOPS / TFLOPS: Miliardi o trilioni di operazioni in virgola mobile al secondo. Forniscono una misura della velocità assoluta di calcolo
-
-.
-Intensità Aritmetica: Il rapporto tra operazioni in virgola mobile eseguite e byte trasferiti dalla memoria
-.
-
-    Questa metrica è essenziale per il modello Roofline, che confronta le prestazioni effettive con i limiti teorici del processore (Peak Performance) e della larghezza di banda (Memory Wall)
-
+    - Speedup (Aumento di velocità):Calcolo: S(n,p)=T(n,p)T(n,1)​
+    - Efficienza: Misura la frazione di tempo in cui le risorse sono utilizzate produttivamente
+    - Calcolo: E(n,p)=pS(n,p)​
+    - Analisi della Scalabilità (strong vs weak scaling)
+    - Metriche di Throughput e Calcolo Astratte (GFLOPS / TFLOPS)
+    - Intensità Aritmetica: Il rapporto tra operazioni in virgola mobile eseguite e byte trasferiti dalla memoria
+    - Roofline
         .
 
 4. Analisi dell'Efficienza Hardware (Micro-architettura)
