@@ -1,0 +1,2 @@
+compiler,O3_lm_march=native,O3_lm_march=native_fast,O3_lm_march=native_fast_xHost,O3_lm_march=native_fast_xHost_DALIGNED,O3_lm_march=native_fast_xHost_DALIGNED_DNOFUNCCALL
+icx,289.2087,176.7928,172.289,160.8409,152.4639
