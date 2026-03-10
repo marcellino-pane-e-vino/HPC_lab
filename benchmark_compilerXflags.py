@@ -1,34 +1,24 @@
 #!/usr/bin/env python3
 """
 ============================================================
-C Benchmark Framework: Compiler vs Flags (Improved)
+C Benchmark Framework: Compiler vs Optimization Profiles
 ============================================================
 
 Benchmark a single C program across:
-- different compilers (rows)
-- different compiler flag sets (columns)
+- different compilers
+- different optimization profiles
 
-Includes:
-- Absolute paths
-- Automatic CSV output folder
-- icx compiler support
-- Executable permission fixes for build scripts
+CSV Output:
+    Rows    -> optimization configurations
+    Columns -> compilers
 
-HOW TO USE:
-1. Ensure your C program:
-      - Accepts n as command line argument:
-            int n = atoi(argv[1]);
-      - Prints execution time like:
-            Execution Time: X.XXXX seconds
+Profiles represent compiler-independent optimization strategies.
+Each compiler maps them to equivalent flags.
 
-2. Place any required build scripts (e.g., for matrixmult_library.c) in the program folder.
-
-3. Edit ONLY THE CONFIGURATION SECTION below.
-
-4. Run:
-      python3 benchmark_compiler_flags.py
-
-Results will be written to a CSV inside 'benchmarks/' folder.
+Advantages:
+- Avoids unsupported flags
+- Produces compact CSV tables
+- Enables fair cross-compiler comparisons
 ============================================================
 """
 
@@ -36,23 +26,43 @@ import subprocess
 import statistics
 import csv
 import sys
-import re
-import os
 from pathlib import Path
 
 # ==========================================================
 # ================== CONFIGURATION =========================
 # ==========================================================
 
-C_FILE = "matrixmult_opt.c"  # Fixed program
-N_VALUE = 5000               # Fixed dimension(s)
-RUNS_PER_N = 1               # Number of runs to average
-COMPILERS = ["gcc", "icc", "icx"]  # Rows: compilers to test
-COMPILER_FLAGS_LIST = [             # Columns: sets of compiler flags
-    ["-lm", "-march=native"],
-    ["-O1", "-lm", "-march=native"],
-    ["-O2", "-lm", "-march=native"],
-    ["-O3", "-lm", "-march=native"]
+C_FILE = "matrixmult_opt.c"
+N_VALUE = 300
+RUNS_PER_N = 1
+
+COMPILERS = ["gcc", "icc", "icx"]
+
+# ----------------------------------------------------------
+# Flag aliases -> compiler specific flags
+# ----------------------------------------------------------
+
+FLAG_ALIASES = {
+    "OPT_O3": {"gcc": ["-O3"], "icc": ["-O3"], "icx": ["-O3"]},
+    "MATH_LIB": {"gcc": ["-lm"], "icc": ["-lm"], "icx": ["-lm"]},
+    "CPU_NATIVE": {"gcc": ["-march=native"], "icc": ["-xHost"], "icx": ["-xHost"]},
+    "FAST": {"gcc": ["-Ofast"], "icc": ["-Ofast"], "icx": ["-fast"]},
+    "MEMORY_ALIGNMENT": {"gcc": ["-DALIGNED"], "icc": ["-DALIGNED"], "icx": ["-DALIGNED"]},
+    "INLINE": {"gcc": ["-DNOFUNCCALL"], "icc": ["-DNOFUNCCALL"], "icx": ["-DNOFUNCCALL"]},
+    "LINKING": {"gcc": ["-flto"], "icc": ["-ipo"], "icx": ["-ipo"]}
+}
+
+# ----------------------------------------------------------
+# Optimization configurations
+# ----------------------------------------------------------
+
+OPT_CONFIGS = [
+    ["OPT_O3", "MATH_LIB"],
+    ["OPT_O3", "MATH_LIB", "CPU_NATIVE"],
+    ["OPT_O3", "MATH_LIB", "CPU_NATIVE", "FAST"],
+    ["OPT_O3", "MATH_LIB", "CPU_NATIVE", "FAST", "MEMORY_ALIGNMENT"],
+    ["OPT_O3", "MATH_LIB", "CPU_NATIVE", "FAST", "MEMORY_ALIGNMENT", "INLINE"],
+    ["OPT_O3", "MATH_LIB", "CPU_NATIVE", "FAST", "MEMORY_ALIGNMENT", "INLINE", "LINKING"]
 ]
 
 # Output folder
@@ -60,75 +70,51 @@ OUTPUT_FOLDER = Path(__file__).parent / "benchmarks"
 OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
 
 # ==========================================================
-# ============== DO NOT MODIFY BELOW ======================
+# ============== FUNCTIONS / CLASSES ======================
 # ==========================================================
+
+def expand_flags(compiler, config):
+    """Translate flag aliases to compiler flags."""
+    flags = []
+    for alias in config:
+        flags.extend(FLAG_ALIASES.get(alias, {}).get(compiler, []))
+    return flags
+
 
 class Compiler:
     """Handles compilation of C source file with given compiler and flags."""
 
     @staticmethod
     def compile(source_file: Path, compiler: str, flags: list) -> Path:
+
         source_file = source_file.resolve()
+        safe_flags = "_".join(f.replace("-", "") for f in flags) or "default"
+        binary = OUTPUT_FOLDER / f"{source_file.stem}_{compiler}_{safe_flags}"
 
-        # Special case: build script for matrixmult_library.c
-        if source_file.name == "matrixmult_library.c":
-            build_script = source_file.parent / "build_matrixmult.sh"
-            if not build_script.exists():
-                print(f"[ERROR] Build script not found: {build_script}")
-                sys.exit(1)
+        print(f"\n[COMPILING] {compiler}")
+        print(f"  Source file : {source_file}")
+        print(f"  Flags       : {' '.join(flags)}")
 
-            if not os.access(build_script, os.X_OK):
-                print(f"[INFO] Build script not executable. Fixing permissions...")
-                try:
-                    os.chmod(build_script, 0o755)
-                except Exception as e:
-                    print(f"[ERROR] Failed to set execute permission: {e}")
-                    sys.exit(1)
+        normal_flags = [f for f in flags if f != "-lm"]
+        lm_flags = ["-lm"] if "-lm" in flags else []
 
-            print(f"[INFO] Running build script for {source_file} ...")
-            try:
-                subprocess.run([str(build_script)], check=True)
-            except subprocess.CalledProcessError:
-                print(f"[ERROR] Build script failed for {source_file}")
-                sys.exit(1)
-
-            binary = source_file.parent / "matrixmult"
-            if not binary.exists():
-                print(f"[ERROR] Expected executable not found: {binary}")
-                sys.exit(1)
-
-            print(f"[OK] Build script completed: {binary}")
-            return binary
-
-        # Normal compilation
-        safe_flags = "_".join(f.replace("-", "") for f in flags)
-        binary_name = f"{source_file.stem}_{compiler}_{safe_flags}"
-        binary = OUTPUT_FOLDER / binary_name
-        print(f"[INFO] Compiling '{source_file}' with {compiler} flags {flags} -> '{binary}'")
-
-        cmd = [compiler, str(source_file), "-o", str(binary)] + flags
+        cmd = [compiler, str(source_file), "-o", str(binary)] + normal_flags + lm_flags
 
         try:
-            if compiler == "icx" or compiler == "icc" :
+            if compiler in ["icc", "icx"]:
                 compile_command = " ".join(cmd)
                 subprocess.run(
-                    [
-                        "bash",
-                        "-c",
-                        f"source /opt/intel/oneapi/setvars.sh > /dev/null 2>&1 && {compile_command}"
-                    ],
-                    check=True,
-                    capture_output=True,
-                    text=True
+                    ["bash", "-c",
+                     f"source /opt/intel/oneapi/setvars.sh > /dev/null 2>&1 && {compile_command}"],
+                    check=True, capture_output=True, text=True
                 )
             else:
                 subprocess.run(cmd, check=True, capture_output=True, text=True)
 
-            print(f"[OK] Compilation succeeded: {binary}")
+            print(f"  ✔ Compilation successful → {binary}")
 
         except subprocess.CalledProcessError as e:
-            print(f"[ERROR] Compilation failed for {source_file} with {compiler}")
-            print("[COMPILER OUTPUT]")
+            print(f"\n[ERROR] Compilation failed with compiler: {compiler}")
             print(e.stdout)
             print(e.stderr)
             sys.exit(1)
@@ -141,79 +127,119 @@ class Executor:
 
     @staticmethod
     def run(binary: Path, n: int) -> float:
+
         binary_path = str(binary.resolve())
-        print(f"[INFO] Running '{binary_path}' with n={n}")
+
+        print(f"  Running benchmark (n={n})...")
+
         try:
-            result = subprocess.run([binary_path, str(n)],
-                                    capture_output=True, text=True, check=True)
+            result = subprocess.run(
+                [binary_path, str(n)],
+                capture_output=True,
+                text=True,
+                check=True
+            )
         except subprocess.CalledProcessError:
             print(f"[ERROR] Execution failed for {binary_path}")
             sys.exit(1)
 
         for line in result.stdout.splitlines():
             if "Execution Time" in line:
-                print(f"[INFO] Output received: {line.strip()}")
-                return float(line.split()[-2])
+                time = float(line.split()[-2])
+                print(f"  ✔ Execution time: {time:.6f} s")
+                return time
 
-        print(f"[ERROR] Execution time not found in output of {binary_path}")
+        print("[ERROR] Execution time not found in program output")
         sys.exit(1)
 
 
 class Benchmark:
-    """Benchmark fixed program across compilers and flags."""
+    """Benchmark program across compilers and optimization configurations."""
 
-    def __init__(self, c_file, n_value, runs, compilers, flags_list):
+    def __init__(self, c_file, n_value, runs, compilers, opt_configs):
         self.c_file = Path(c_file)
         self.n_value = n_value
         self.runs = runs
         self.compilers = compilers
-        self.flags_list = flags_list
+        self.opt_configs = opt_configs
 
     def run(self):
-        results = {}  # {compiler: {flags_str: avg_time}}
 
-        for compiler in self.compilers:
-            print(f"\n[INFO] Benchmarking with compiler: {compiler}")
-            results[compiler] = {}
+        print("\n================================================")
+        print("Benchmark started")
+        print("Program:", self.c_file)
+        print("Matrix size (n):", self.n_value)
+        print("Compilers:", ", ".join(self.compilers))
+        print("Configurations:", len(self.opt_configs))
+        print("================================================")
 
-            for flags in self.flags_list:
-                flags_str = "_".join(flags).replace("-", "")
-                timings = []
+        results = {}
+
+        for config in self.opt_configs:
+
+            config_name = "_".join(config)
+            print(f"\n[CONFIGURATION] {config_name}")
+
+            results[config_name] = {}
+
+            for compiler in self.compilers:
+
+                flags = expand_flags(compiler, config)
 
                 binary = Compiler.compile(self.c_file, compiler, flags)
 
-                for _ in range(self.runs):
-                    t = Executor.run(binary, self.n_value)
-                    timings.append(t)
+                timings = [
+                    Executor.run(binary, self.n_value)
+                    for _ in range(self.runs)
+                ]
 
                 avg_time = statistics.mean(timings)
-                results[compiler][flags_str] = avg_time
-                print(f"[OK] Compiler={compiler}, Flags={flags} -> Avg Time={avg_time:.4f}s")
+
+                results[config_name][compiler] = avg_time
+
+                print(f"  → Average time with {compiler}: {avg_time:.6f} s")
+
+        print("\nBenchmark finished successfully.")
 
         return results
 
 
 class CSVWriter:
-    """Writes results to CSV with compilers as rows, flags as columns."""
+    """Writes results to CSV with configurations as rows."""
 
     @staticmethod
-    def write(program_file, n_value, compilers, flags_list, data):
+    def write(program_file, n_value, compilers, configs, data):
+
         program_stem = Path(program_file).stem
         compilers_str = "_".join(compilers)
-        flags_str = "_".join("_".join(f).replace("-", "") for f in flags_list)
-        safe_flags_str = re.sub(r"[^\w]+", "_", flags_str)
-        output_csv = OUTPUT_FOLDER / f"results|{program_stem}|n{n_value}|{compilers_str}|{safe_flags_str}.csv"
 
-        headers = ["compiler"] + ["_".join(f).replace("-", "") for f in flags_list]
+        unique_flags = sorted({flag for config in configs for flag in config})
+        flags_str = "+".join(unique_flags)
+
+        output_csv = OUTPUT_FOLDER / (
+            f"results|{program_stem}|n{n_value}|{compilers_str}|{flags_str}.csv"
+        )
+
+        config_names = ["_".join(c) for c in configs]
+
+        headers = ["configuration"] + compilers
 
         with open(output_csv, "w", newline="") as f:
+
             writer = csv.writer(f)
             writer.writerow(headers)
-            for compiler, times in data.items():
-                row = [compiler] + [times.get("_".join(f).replace("-", ""), "") for f in flags_list]
+
+            for config_name in config_names:
+
+                row = [config_name]
+
+                for compiler in compilers:
+                    row.append(data.get(config_name, {}).get(compiler, ""))
+
                 writer.writerow(row)
 
-        print(f"[INFO] CSV results written to '{output_csv}'")
+        print("\n[CSV OUTPUT]")
+        print(f"Results written to: {output_csv}")
 
 
 # ==========================================================
@@ -221,11 +247,28 @@ class CSVWriter:
 # ==========================================================
 
 def main():
-    print("[START] Benchmark process initiated...")
-    benchmark = Benchmark(C_FILE, N_VALUE, RUNS_PER_N, COMPILERS, COMPILER_FLAGS_LIST)
+
+    print("\n[START] Launching benchmark framework")
+
+    benchmark = Benchmark(
+        C_FILE,
+        N_VALUE,
+        RUNS_PER_N,
+        COMPILERS,
+        OPT_CONFIGS
+    )
+
     results = benchmark.run()
-    CSVWriter.write(C_FILE, N_VALUE, COMPILERS, COMPILER_FLAGS_LIST, results)
-    print("[FINISH] Benchmark complete.")
+
+    CSVWriter.write(
+        C_FILE,
+        N_VALUE,
+        COMPILERS,
+        OPT_CONFIGS,
+        results
+    )
+
+    print("\n[FINISH] Benchmark process completed successfully.\n")
 
 
 if __name__ == "__main__":
