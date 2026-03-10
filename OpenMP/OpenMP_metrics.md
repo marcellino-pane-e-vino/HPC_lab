@@ -2,9 +2,6 @@
 
 | Compilatore | Ottimizzazione | Flag Architettura | Thread (OMP_NUM_THREADS) | Tempo (Secondi) |
 | :--- | :--- | :--- | :---: | :--- |
-| **GCC** | Nessuna (Default) | `-march=native` | *Tutti i core logici* | 17.320 s |
-| **GCC** | `-O2` | `-march=native` | *Tutti i core logici* | 7.131 s |
-| **GCC** | `-O3` | `-march=native` | *Tutti i core logici* | ~5.646 s |
 | **ICX** (Intel) | Nessuna (Default) | `-xHost` | *Tutti i core logici* | 0.643 s |
 | **ICX** (Intel) | `-O3` | `-xHost` | *Tutti i core logici* | **0.662 s** |
 | **ICX** (Intel) | `-O3` | `-xHost` | **1** | 4.786 s |
