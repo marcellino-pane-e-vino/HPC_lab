@@ -18,7 +18,7 @@ Questo report documenta il comportamento dell'algoritmo di moltiplicazione tra m
 | **ICX** | Nessuna (Base) | `-xHost` | **24** | 0.607 s |
 | **ICX** | `-O3` | `-xHost` | **1** | 4.790 s |
 | **ICX** | `-O3` | `-xHost` | **8** | 0.660 s |
-| **ICX** | `-O3` | `-xHost` | **24** | **0.656 s** |
+| **ICX** | `-O3` | `-xHost` | **24** | 0.656 s |
 
 ---
 
