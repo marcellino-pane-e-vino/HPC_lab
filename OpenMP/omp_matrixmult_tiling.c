@@ -19,9 +19,9 @@ int main(int argc, char **argv) {
 
     // Allocazione allineata per favorire le istruzioni SIMD (AVX/AVX-512)
     // Usiamo aligned_alloc (C11) per allineare a 64 byte (dimensione cache line)
-    double *a = (double *)aligned_alloc(64, n * n * sizeof(double));
-    double *b = (double *)aligned_alloc(64, n * n * sizeof(double));
-    double *c = (double *)aligned_alloc(64, n * n * sizeof(double));
+    double * restrict a = (double *)aligned_alloc(64, n * n * sizeof(double));
+    double * restrict b = (double *)aligned_alloc(64, n * n * sizeof(double));
+    double * restrict c = (double *)aligned_alloc(64, n * n * sizeof(double));
 
     if (!a || !b || !c) {
         printf("Errore memoria!\n");
@@ -42,26 +42,26 @@ int main(int argc, char **argv) {
     double start_time = omp_get_wtime();
 
     // Core del calcolo: Tiling + OpenMP
-    // Usiamo 'collapse(2)' per parallelizzare i primi due cicli dei blocchi
-    #pragma omp parallel for collapse(2) schedule(static)
-    for (int ii = 0; ii < n; ii += BLOCK_SIZE) {
+   // Correzione: invertiamo jj e kk nei cicli esterni!
+#pragma omp parallel for collapse(2) schedule(static)
+for (int ii = 0; ii < n; ii += BLOCK_SIZE) {
+    for (int jj = 0; jj < n; jj += BLOCK_SIZE) {
         for (int kk = 0; kk < n; kk += BLOCK_SIZE) {
-            for (int jj = 0; jj < n; jj += BLOCK_SIZE) {
-                
-                // Cicli interni sui blocchi
-                for (int i = ii; i < (ii + BLOCK_SIZE < n ? ii + BLOCK_SIZE : n); i++) {
-                    for (int k = kk; k < (kk + BLOCK_SIZE < n ? kk + BLOCK_SIZE : n); k++) {
-                        
-                        double temp = a[i * n + k]; // Carichiamo in registro
-                        #pragma omp simd
-                        for (int j = jj; j < (jj + BLOCK_SIZE < n ? jj + BLOCK_SIZE : n); j++) {
-                            c[i * n + j] += temp * b[k * n + j];
-                        }
+            
+            // Cicli interni: L'ordine I-K-J qui dentro va benissimo
+            for (int i = ii; i < (ii + BLOCK_SIZE < n ? ii + BLOCK_SIZE : n); i++) {
+                for (int k = kk; k < (kk + BLOCK_SIZE < n ? kk + BLOCK_SIZE : n); k++) {
+                    
+                    double temp = a[i * n + k]; 
+                    #pragma omp simd
+                    for (int j = jj; j < (jj + BLOCK_SIZE < n ? jj + BLOCK_SIZE : n); j++) {
+                        c[i * n + j] += temp * b[k * n + j];
                     }
                 }
             }
         }
     }
+}
 
     double end_time = omp_get_wtime();
     printf("Tempo di esecuzione: %f secondi\n", end_time - start_time);
