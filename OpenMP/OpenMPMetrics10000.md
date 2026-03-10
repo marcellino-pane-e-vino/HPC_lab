@@ -1,4 +1,4 @@
-# Report Analisi Prestazioni: Moltiplicazione Matrici OpenMP (N=10000*)
+# Report Analisi Prestazioni: Moltiplicazione Matrici OpenMP (N=10000)
 
 Questo documento analizza le prestazioni del calcolo matriciale su scala maggiore. L'incremento della dimensione della matrice evidenzia ancora di più le differenze tra i compilatori e i limiti fisici dell'hardware (bandwidth di memoria).
 
