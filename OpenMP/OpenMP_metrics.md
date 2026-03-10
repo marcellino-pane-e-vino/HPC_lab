@@ -1,23 +1,43 @@
-## Tabella dei Risultati
+# Analisi Prestazionale: Compilatori Intel ICC vs ICX su Matrici OpenMP
+
+Questo report documenta il comportamento dell'algoritmo di moltiplicazione tra matrici (5000x5000) sfruttando l'ecosistema di compilazione Intel. L'obiettivo è confrontare lo storico compilatore *Intel C++ Compiler Classic* (`icc`) con il suo moderno successore basato su LLVM, *Intel oneAPI DPC++/C++ Compiler* (`icx`), misurando i tempi di esecuzione e l'efficienza dello *speedup* al variare dei thread e dei flag di ottimizzazione.
+
+## 📊 Tabella dei Risultati Sperimentali
 
 | Compilatore | Ottimizzazione | Flag Architettura | Thread (OMP_NUM_THREADS) | Tempo (Secondi) |
 | :--- | :--- | :--- | :---: | :--- |
-| **ICX** (Intel) | Nessuna (Default) | `-xHost` | *Tutti i core logici* | 0.643 s |
-| **ICX** (Intel) | `-O3` | `-xHost` | *Tutti i core logici* | **0.662 s** |
-| **ICX** (Intel) | `-O3` | `-xHost` | **1** | 4.786 s |
-| **ICX** (Intel) | `-O3` | `-xHost` | **8** | 0.673 s |
-| **ICX** (Intel) | `-O3` | `-xHost` | **24** | **0.627 s** |
+| **ICC** (Classic) | Nessuna (Base) | `-xHost` | *Tutti* (Default) | 5.389 s |
+| **ICC** (Classic) | Nessuna (Base) | `-xHost` | **1** | 47.789 s |
+| **ICC** (Classic) | Nessuna (Base) | `-xHost` | **8** | 9.213 s |
+| **ICC** (Classic) | Nessuna (Base) | `-xHost` | **24** | 5.164 s |
+| **ICC** (Classic) | `-O3` | `-xHost` | **1** | 5.047 s |
+| **ICC** (Classic) | `-O3` | `-xHost` | **8** | 0.816 s |
+| **ICC** (Classic) | `-O3` | `-xHost` | **24** | 0.604 s |
+| **ICX** (LLVM) | Nessuna (Base) | `-xHost` | **1** | 4.995 s |
+| **ICX** (LLVM) | Nessuna (Base) | `-xHost` | **8** | 0.840 s |
+| **ICX** (LLVM) | Nessuna (Base) | `-xHost` | **24** | 0.607 s |
+| **ICX** (LLVM) | `-O3` | `-xHost` | **1** | 4.790 s |
+| **ICX** (LLVM) | `-O3` | `-xHost` | **8** | 0.660 s |
+| **ICX** (LLVM) | `-O3` | `-xHost` | **24** | **0.656 s** |
 
-## Analisi e Conclusioni
+---
 
-1. **Impatto delle Ottimizzazioni del Compilatore:**
-   Il passaggio da un'assenza di ottimizzazioni (`-O0`) al livello massimo (`-O3`) nel compilatore GCC ha portato a una riduzione del tempo di calcolo da 17.3s a 5.6s. Il compilatore applica tecniche di loop unrolling e riordino delle istruzioni, riducendo le penalità legate ai *cache miss* e facilitando il flusso dati verso i core.
+## 🔬 Analisi Approfondita dei Dati
+Leggendo le metriche, emergono dinamiche fondamentali sul funzionamento dei compilatori in ambito HPC (High Performance Computing), confermando empiricamente i principi architetturali illustrati a lezione.
 
-2. **Vettorializzazione SIMD (Il vantaggio Intel):**
-   Il compilatore Intel `icx`, accoppiato al flag `-xHost` (che istruisce il compilatore a generare codice per l'architettura host specifica), mostra prestazioni sbalorditive, riducendo il tempo a circa 0.6 secondi. Questo drastico calo evidenzia l'eccezionale capacità di `icx` di effettuare l'auto-vettorializzazione del ciclo più interno, convertendo le singole operazioni scalari in istruzioni SIMD (es. AVX/AVX2). L'hardware processa più dati contemporaneamente all'interno di ogni singolo ciclo di clock.
+### 1. Il passaggio di testimone: ICC vs ICX e il "miracolo" LLVM
+La prima cosa che salta all'occhio durante l'uso di `icc` è il *remark #10441*. Il compilatore storico di Intel è stato deprecato in favore di `icx`. E guardando i dati "Base" (senza `-O3`), capiamo subito il perché.
+Quando usiamo `icc` senza spingere le ottimizzazioni al massimo, un singolo thread impiega **quasi 48 secondi** per completare il calcolo. Quando passiamo a `icx` con le stesse identiche istruzioni (solo `-xHost`), il tempo per un singolo thread è di **circa 5 secondi**. 
 
-3. **Scalabilità OpenMP e Speedup:**
-   Analizzando i run effettuati con ICX variando il numero di thread:
-   * Con 1 thread il tempo è di 4.786 s.
-   * Con 8 thread il tempo scende a 0.673 s, registrando uno *speedup* eccellente (circa 7.1x), dimostrando una scalabilità quasi lineare grazie alla corretta mitigazione del *False Sharing* e all'uso dello scheduling statico che abbassa drasticamente l'overhead di OpenMP a runtime.
-   * Aumentando ulteriormente i thread a 24, il guadagno diventa marginale (0.627 s). Questo appiattimento della curva delle prestazioni indica il raggiungimento del "Memory Wall": la capacità di calcolo dei processori supera la larghezza di banda massima del bus di memoria RAM.
+Cosa significa questo? Che `icx`, appoggiandosi all'infrastruttura LLVM, è estremamente più aggressivo e intelligente "di fabbrica". Riesce a individuare i pattern matematici dei cicli annidati e ad applicare la vettorializzazione hardware in automatico, senza aver bisogno che lo sviluppatore forzi esplicitamente i flag di ottimizzazione più alti.
+
+### 2. L'impatto esplosivo dell'ottimizzazione (-O3)
+Se con `icx` il flag `-O3` lima solo qualche frazione di secondo (perché il grosso del lavoro SIMD è già stato fatto in partenza), con il vecchio `icc` il parametro `-O3` è letteralmente questione di vita o di morte prestazionale. 
+Passare da 47.7 secondi a 5.04 secondi (a parità di 1 singolo thread) significa aver ordinato a `icc` di srotolare brutalmente i cicli (*loop unrolling*) e di compattare le operazioni scalari in enormi registri vettoriali (SIMD). È una dimostrazione didatticamente perfetta di quanto il software possa fare la differenza sullo stesso identico pezzo di silicio, ricalcando gli esempi di auto-parallelizzazione dei report del compilatore.
+
+### 3. Scalabilità e il "Memory Wall"
+Concentriamoci sui run più prestanti in assoluto (quelli con `-O3` e `-xHost`) per calcolare lo *Speedup* parallelo.
+
+* **Da 1 a 8 Thread:** Con ICX passiamo da 4.79s a 0.66s. Abbiamo uno *speedup* impressionante di **~7.2x**. Il lavoro viene diviso quasi perfettamente. I thread macinano calcoli in parallelo sfruttando al meglio la memoria allocata con la First-Touch policy NUMA che abbiamo implementato nel codice.
+
+* **Da 8 a 24 Thread:** Qui la curva crolla. Sia ICC (0.604s) che ICX (0.656s) si fermano intorno ai 6 decimi di secondo. Triplicare la forza lavoro non serve a nulla, perché non stiamo più misurando la velocità della CPU, ma quella della RAM. Abbiamo sbattuto violentemente contro il **Memory Wall**: i core della CPU sono diventati così mostruosamente veloci grazie alla vettorializzazione e alla parallelizzazione che finiscono il loro lavoro in attesa che la memoria di sistema sia fisicamente in grado di consegnargli i prossimi blocchi della matrice.
