@@ -13,14 +13,15 @@ Questo report documenta il comportamento dell'algoritmo di moltiplicazione tra m
 | **ICC** | `-O3` | `-xHost` | **1** | 5.047 s |
 | **ICC** | `-O3` | `-xHost` | **8** | 0.816 s |
 | **ICC** | `-O3` | `-xHost` | **24** | **0.604 s** |
+| **ICX** | Nessuna (Base) | `-xHost` | *Tutti* (Default) | **0.587 s** |
 | **ICX** | Nessuna (Base) | `-xHost` | **1** | 4.995 s |
 | **ICX** | Nessuna (Base) | `-xHost` | **8** | 0.840 s |
-| **ICX** | Nessuna (Base) | `-xHost` | **24** | **0.607 s** |
+| **ICX** | Nessuna (Base) | `-xHost` | **24** | 0.607 s |
 | **ICX** | `-O3` | `-xHost` | **1** | 4.790 s |
 | **ICX** | `-O3` | `-xHost` | **8** | 0.660 s |
 | **ICX** | `-O3` | `-xHost` | **24** | 0.656 s |
 
----
+---0.587
 
 ## 🔬 Analisi Approfondita dei Dati
 Leggendo le metriche, emergono dinamiche fondamentali sul funzionamento dei compilatori in ambito HPC (High Performance Computing), confermando empiricamente i principi architetturali illustrati a lezione.
