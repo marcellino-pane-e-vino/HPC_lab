@@ -6,19 +6,19 @@ Questo report documenta il comportamento dell'algoritmo di moltiplicazione tra m
 
 | Compilatore | Ottimizzazione | Flag Architettura | Thread (OMP_NUM_THREADS) | Tempo (Secondi) |
 | :--- | :--- | :--- | :---: | :--- |
-| **ICC** (Classic) | Nessuna (Base) | `-xHost` | *Tutti* (Default) | 5.389 s |
-| **ICC** (Classic) | Nessuna (Base) | `-xHost` | **1** | 47.789 s |
-| **ICC** (Classic) | Nessuna (Base) | `-xHost` | **8** | 9.213 s |
-| **ICC** (Classic) | Nessuna (Base) | `-xHost` | **24** | 5.164 s |
-| **ICC** (Classic) | `-O3` | `-xHost` | **1** | 5.047 s |
-| **ICC** (Classic) | `-O3` | `-xHost` | **8** | 0.816 s |
-| **ICC** (Classic) | `-O3` | `-xHost` | **24** | 0.604 s |
-| **ICX** (LLVM) | Nessuna (Base) | `-xHost` | **1** | 4.995 s |
-| **ICX** (LLVM) | Nessuna (Base) | `-xHost` | **8** | 0.840 s |
-| **ICX** (LLVM) | Nessuna (Base) | `-xHost` | **24** | 0.607 s |
-| **ICX** (LLVM) | `-O3` | `-xHost` | **1** | 4.790 s |
-| **ICX** (LLVM) | `-O3` | `-xHost` | **8** | 0.660 s |
-| **ICX** (LLVM) | `-O3` | `-xHost` | **24** | 0.656 s |
+| **ICC** | Nessuna (Base) | `-xHost` | *Tutti* (Default) | 5.389 s |
+| **ICC** | Nessuna (Base) | `-xHost` | **1** | 47.789 s |
+| **ICC** | Nessuna (Base) | `-xHost` | **8** | 9.213 s |
+| **ICC** | Nessuna (Base) | `-xHost` | **24** | 5.164 s |
+| **ICC** | `-O3` | `-xHost` | **1** | 5.047 s |
+| **ICC** | `-O3` | `-xHost` | **8** | 0.816 s |
+| **ICC** | `-O3` | `-xHost` | **24** | **0.604 s** |
+| **ICX** | Nessuna (Base) | `-xHost` | **1** | 4.995 s |
+| **ICX** | Nessuna (Base) | `-xHost` | **8** | 0.840 s |
+| **ICX** | Nessuna (Base) | `-xHost` | **24** | **0.607 s** |
+| **ICX** | `-O3` | `-xHost` | **1** | 4.790 s |
+| **ICX** | `-O3` | `-xHost` | **8** | 0.660 s |
+| **ICX** | `-O3` | `-xHost` | **24** | 0.656 s |
 
 ---
 
