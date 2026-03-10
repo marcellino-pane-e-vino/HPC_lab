@@ -194,8 +194,9 @@ Ecco il perché, spiegato in modo rigoroso ma semplice da esporre:Il numero di o
 Cosa cambia allora? La costante nascosta. In notazione Big-O, il tempo di esecuzione reale si può approssimare come $T = c \cdot n^3$, dove $c$ è una costante che rappresenta il costo (in tempo) di ogni singola operazione. Nel caso della Baseline, $c$ è enorme perché la CPU passa la maggior parte del tempo ad aspettare i dati dalla RAM. Il Loop Tiling abbassa drasticamente il valore della costante $c$ (perché i dati sono già pronti nella velocissima cache L1), permettendoti di andare molto più veloce nel mondo reale. Tuttavia, la curva di crescita al variare della dimensione $n$ rimarrà sempre cubica.La "chicca" da spendere all'esame:Se un professore ti chiede: "E se volessi abbattere quel limite di $O(n^3)$?"La risposta corretta è che non puoi farlo ottimizzando l'hardware. Devi cambiare l'algoritmo matematico alla base, usando ad esempio l'Algoritmo di Strassen, che sfrutta proprietà algebriche per ridurre le moltiplicazioni e abbassare la complessità a $O(n^{2.807})$.Tuttavia, puoi aggiungere che in HPC (e in librerie standard come OpenBLAS o Intel MKL) si preferisce quasi sempre usare l'algoritmo standard $O(n^3)$ iper-ottimizzato con Tiling e vettorializzazione, perché Strassen introduce un overhead altissimo, è più difficile da parallelizzare e perde precisione numerica con i numeri in virgola mobile (double).
 
 
-
-
+------------------------- VERY USEFUL!!!! -------------------------
+Se il professore ti chiede "Perché non $i-j-k$?", la tua risposta, basata su questo testo, sarà devastante:
+"Perché in $i-j-k$ il ciclo interno varia la $k$. Quindi b[k][j] salta di riga in riga. In C, saltare di riga in riga significa saltare di $N$ posizioni in memoria (stride-$N$). Questo carica una cache line da 64 byte per usare un solo double, sprecando gli altri 7 e saturando la banda di memoria inutilmente. Con $i-k-j$ li consumo tutti e 8."
 
 
 ------------------------- IMPORTANT!!!! (ALIGNED CASE)-------------------------
