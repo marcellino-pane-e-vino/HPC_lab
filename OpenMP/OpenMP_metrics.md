@@ -1,9 +1,3 @@
-# Report Analisi Prestazioni: Moltiplicazione Matrici in OpenMP
-
-Il seguente test valuta le prestazioni di un algoritmo di moltiplicazione di matrici dense (5000x5000) parallelizzato tramite direttive OpenMP. 
-
-L'implementazione sfrutta il costrutto `omp parallel for` con scheduling statico (ottimale per cicli ampi e altamente predicibili, come suggerito dalle specifiche OpenMP) e include l'inizializzazione parallela dei dati per sfruttare la "First-Touch Policy" delle architetture NUMA.
-
 ## Tabella dei Risultati
 
 | Compilatore | Ottimizzazione | Flag Architettura | Thread (OMP_NUM_THREADS) | Tempo (Secondi) |
