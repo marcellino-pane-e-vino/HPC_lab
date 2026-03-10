@@ -11,14 +11,6 @@ Benchmark a single C program across:
 CSV Output:
     Rows    -> optimization configurations
     Columns -> compilers
-
-Profiles represent compiler-independent optimization strategies.
-Each compiler maps them to equivalent flags.
-
-Advantages:
-- Avoids unsupported flags
-- Produces compact CSV tables
-- Enables fair cross-compiler comparisons
 ============================================================
 """
 
@@ -33,8 +25,10 @@ from pathlib import Path
 # ==========================================================
 
 C_FILE = "matrixmult_opt.c"
+
 N_VALUE = 300
 RUNS_PER_N = 1
+N_THREADS = 24
 
 COMPILERS = ["gcc", "icc", "icx"]
 
@@ -49,7 +43,8 @@ FLAG_ALIASES = {
     "FAST": {"gcc": ["-Ofast"], "icc": ["-Ofast"], "icx": ["-fast"]},
     "MEMORY_ALIGNMENT": {"gcc": ["-DALIGNED"], "icc": ["-DALIGNED"], "icx": ["-DALIGNED"]},
     "INLINE": {"gcc": ["-DNOFUNCCALL"], "icc": ["-DNOFUNCCALL"], "icx": ["-DNOFUNCCALL"]},
-    "LINKING": {"gcc": ["-flto"], "icc": ["-ipo"], "icx": ["-ipo"]}
+    "LINKING": {"gcc": ["-flto"], "icc": ["-ipo"], "icx": ["-ipo"]},
+    "OPENMP": {"gcc": ["-fopenmp"], "icc": ["-qopenmp"], "icx": ["-fopenmp"]},
 }
 
 # ----------------------------------------------------------
@@ -57,32 +52,36 @@ FLAG_ALIASES = {
 # ----------------------------------------------------------
 
 OPT_CONFIGS = [
-    ["OPT_O3", "MATH_LIB"],
-    ["OPT_O3", "MATH_LIB", "CPU_NATIVE"],
-    ["OPT_O3", "MATH_LIB", "CPU_NATIVE", "FAST"],
-    ["OPT_O3", "MATH_LIB", "CPU_NATIVE", "FAST", "MEMORY_ALIGNMENT"],
+    #["OPT_O3", "MATH_LIB"],
+    #["OPT_O3", "MATH_LIB", "CPU_NATIVE"],
+    #["OPT_O3", "MATH_LIB", "CPU_NATIVE", "FAST"],
+    #["OPT_O3", "MATH_LIB", "CPU_NATIVE", "FAST", "MEMORY_ALIGNMENT"],
     ["OPT_O3", "MATH_LIB", "CPU_NATIVE", "FAST", "MEMORY_ALIGNMENT", "INLINE"],
-    ["OPT_O3", "MATH_LIB", "CPU_NATIVE", "FAST", "MEMORY_ALIGNMENT", "INLINE", "LINKING"]
+    ["OPT_O3", "MATH_LIB", "CPU_NATIVE", "FAST", "MEMORY_ALIGNMENT", "INLINE", "LINKING"],
+    
+    #["OPT_O3", "OPENMP", "MATH_LIB", "CPU_NATIVE", "FAST", "MEMORY_ALIGNMENT"],
+    #["OPT_O3", "OPENMP", "MATH_LIB", "CPU_NATIVE", "FAST", "MEMORY_ALIGNMENT", "LINKING"]
 ]
 
-# Output folder
 OUTPUT_FOLDER = Path(__file__).parent / "benchmarks"
 OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
 
 # ==========================================================
-# ============== FUNCTIONS / CLASSES ======================
+# ================== UTILITY FUNCTIONS =====================
 # ==========================================================
 
 def expand_flags(compiler, config):
-    """Translate flag aliases to compiler flags."""
     flags = []
     for alias in config:
         flags.extend(FLAG_ALIASES.get(alias, {}).get(compiler, []))
     return flags
 
 
+# ==========================================================
+# ===================== COMPILER ===========================
+# ==========================================================
+
 class Compiler:
-    """Handles compilation of C source file with given compiler and flags."""
 
     @staticmethod
     def compile(source_file: Path, compiler: str, flags: list) -> Path:
@@ -101,62 +100,137 @@ class Compiler:
         cmd = [compiler, str(source_file), "-o", str(binary)] + normal_flags + lm_flags
 
         try:
+
             if compiler in ["icc", "icx"]:
+
                 compile_command = " ".join(cmd)
+
                 subprocess.run(
                     ["bash", "-c",
                      f"source /opt/intel/oneapi/setvars.sh > /dev/null 2>&1 && {compile_command}"],
-                    check=True, capture_output=True, text=True
+                    check=True,
+                    capture_output=True,
+                    text=True
                 )
+
             else:
-                subprocess.run(cmd, check=True, capture_output=True, text=True)
+
+                subprocess.run(
+                    cmd,
+                    check=True,
+                    capture_output=True,
+                    text=True
+                )
 
             print(f"  ✔ Compilation successful → {binary}")
 
         except subprocess.CalledProcessError as e:
+
+            stderr = e.stderr or ""
+            stdout = e.stdout or ""
+
             print(f"\n[ERROR] Compilation failed with compiler: {compiler}")
-            print(e.stdout)
-            print(e.stderr)
+
+            if "omp_" in stderr or "omp_" in stdout:
+
+                print("\n[DIAGNOSTIC] OpenMP symbols detected but OpenMP is not enabled.")
+                print("Add the OPENMP alias to your configuration.\n")
+
+                print("Example:")
+                print('    ["OPT_O3", "OPENMP", "MATH_LIB"]')
+
+                print("\nOPENMP mappings:")
+                print("  gcc  -> -fopenmp")
+                print("  icc  -> -qopenmp")
+                print("  icx  -> -fopenmp")
+
+            else:
+
+                print(stdout)
+                print(stderr)
+
             sys.exit(1)
 
         return binary
 
 
+# ==========================================================
+# ===================== EXECUTOR ===========================
+# ==========================================================
+
 class Executor:
-    """Runs compiled binary and extracts execution time."""
 
     @staticmethod
-    def run(binary: Path, n: int) -> float:
+    def run(binary: Path, n: int, config: list) -> float:
 
         binary_path = str(binary.resolve())
 
         print(f"  Running benchmark (n={n})...")
 
+        use_openmp = "OPENMP" in config
+
+        if use_openmp:
+            cmd = [binary_path, str(n), str(N_THREADS)]
+        else:
+            cmd = [binary_path, str(n)]
+
         try:
+
             result = subprocess.run(
-                [binary_path, str(n)],
+                cmd,
                 capture_output=True,
                 text=True,
                 check=True
             )
-        except subprocess.CalledProcessError:
-            print(f"[ERROR] Execution failed for {binary_path}")
+
+        except subprocess.CalledProcessError as e:
+
+            stdout = e.stdout or ""
+            stderr = e.stderr or ""
+
+            print(f"\n[ERROR] Execution failed for {binary_path}")
+
+            if use_openmp:
+
+                print("\n[DIAGNOSTIC] Possible argument overfeeding detected.")
+                print("The benchmark passed two arguments:")
+                print(f"    N={n}, N_THREADS={N_THREADS}")
+
+                print("\nBut the program may expect only one argument.")
+
+                print("\nSolutions:")
+                print("  • Modify the C program to accept NUM_THREADS")
+                print("  • Remove OPENMP from this configuration")
+
+            print("\nProgram output:")
+            print(stdout)
+            print(stderr)
+
             sys.exit(1)
 
         for line in result.stdout.splitlines():
-            if "Execution Time" in line:
+
+            if "Execution Time" in line or "Tempo di esecuzione" in line:
+
                 time = float(line.split()[-2])
+
                 print(f"  ✔ Execution time: {time:.6f} s")
+
                 return time
 
         print("[ERROR] Execution time not found in program output")
+
         sys.exit(1)
 
 
+# ==========================================================
+# ===================== BENCHMARK ==========================
+# ==========================================================
+
 class Benchmark:
-    """Benchmark program across compilers and optimization configurations."""
 
     def __init__(self, c_file, n_value, runs, compilers, opt_configs):
+
         self.c_file = Path(c_file)
         self.n_value = n_value
         self.runs = runs
@@ -178,6 +252,7 @@ class Benchmark:
         for config in self.opt_configs:
 
             config_name = "_".join(config)
+
             print(f"\n[CONFIGURATION] {config_name}")
 
             results[config_name] = {}
@@ -189,7 +264,7 @@ class Benchmark:
                 binary = Compiler.compile(self.c_file, compiler, flags)
 
                 timings = [
-                    Executor.run(binary, self.n_value)
+                    Executor.run(binary, self.n_value, config)
                     for _ in range(self.runs)
                 ]
 
@@ -204,8 +279,11 @@ class Benchmark:
         return results
 
 
+# ==========================================================
+# ====================== CSV WRITER ========================
+# ==========================================================
+
 class CSVWriter:
-    """Writes results to CSV with configurations as rows."""
 
     @staticmethod
     def write(program_file, n_value, compilers, configs, data):
@@ -220,20 +298,22 @@ class CSVWriter:
             f"results|{program_stem}|n{n_value}|{compilers_str}|{flags_str}.csv"
         )
 
-        config_names = ["_".join(c) for c in configs]
-
         headers = ["configuration"] + compilers
 
         with open(output_csv, "w", newline="") as f:
 
             writer = csv.writer(f)
+
             writer.writerow(headers)
 
-            for config_name in config_names:
+            for config in configs:
+
+                config_name = "_".join(config)
 
                 row = [config_name]
 
                 for compiler in compilers:
+
                     row.append(data.get(config_name, {}).get(compiler, ""))
 
                 writer.writerow(row)
@@ -243,7 +323,7 @@ class CSVWriter:
 
 
 # ==========================================================
-# ====================== MAIN ==============================
+# ========================= MAIN ===========================
 # ==========================================================
 
 def main():
