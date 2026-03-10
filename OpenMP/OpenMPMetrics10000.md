@@ -6,18 +6,20 @@ Questo documento analizza le prestazioni del calcolo matriciale su scala maggior
 
 | Compilatore | Ottimizzazione | Thread (OMP_NUM_THREADS) | Tempo (Secondi) |
 | :--- | :--- | :---: | :--- |
-| **ICC** (Classic) | Nessuna (Base) | **1** | 362.063 s |
-| **ICC** (Classic) | Nessuna (Base) | **8** | 74.129 s |
-| **ICC** (Classic) | Nessuna (Base) | **24** | 43.912 s |
-| **ICC** (Classic) | `-O3 -xHost` | **1** | 40.307 s |
-| **ICC** (Classic) | `-O3 -xHost` | **8** | 5.368 s |
-| **ICC** (Classic) | `-O3 -xHost` | **24** | **4.336 s** |
-| **ICX** (LLVM)    | Nessuna (Base) | **1** | 40.072 s |
-| **ICX** (LLVM)    | Nessuna (Base) | **8** | 6.049 s |
-| **ICX** (LLVM)    | Nessuna (Base) | **24** | 5.234 s |
-| **ICX** (LLVM)    | `-O3 -xHost` | **1** | 38.275 s |
-| **ICX** (LLVM)    | `-O3 -xHost` | **8** | 6.078 s |
-| **ICX** (LLVM)    | `-O3 -xHost` | **24** | 5.232 s |
+| **ICC** | `-xHost` | *Tutti* (Default) | 44.178 s |
+| **ICC** | `-xHost` | **1** | 362.063 s |
+| **ICC** | `-xHost` | **8** | 74.129 s |
+| **ICC** | `-xHost` | **24** | 43.912 s |
+| **ICC** | `-O3 -xHost` | **1** | 40.307 s |
+| **ICC** | `-O3 -xHost` | **8** | 5.368 s |
+| **ICC** | `-O3 -xHost` | **24** | **4.336 s** |
+| **ICX** | `-xHost` | *Tutti* (Default) | **0.587 s** |
+| **ICX** | `-xHost`| **1** | 40.072 s |
+| **ICX** | `-xHost`| **8** | 6.049 s |
+| **ICX** | `-xHost` | **24** | 5.234 s |
+| **ICX** | `-O3 -xHost` | **1** | 38.275 s |
+| **ICX** | `-O3 -xHost` | **8** | 6.078 s |
+| **ICX** | `-O3 -xHost` | **24** | 5.232 s |
 
 ---
 
