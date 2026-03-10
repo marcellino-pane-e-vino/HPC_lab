@@ -1,4 +1,4 @@
-# Analisi Prestazionale: Compilatori Intel ICC vs ICX su Matrici OpenMP
+# N=5000: Compilatori Intel ICC vs ICX su Matrici OpenMP
 
 Questo report documenta il comportamento dell'algoritmo di moltiplicazione tra matrici (5000x5000) sfruttando l'ecosistema di compilazione Intel. L'obiettivo è confrontare lo storico compilatore *Intel C++ Compiler Classic* (`icc`) con il suo moderno successore basato su LLVM, *Intel oneAPI DPC++/C++ Compiler* (`icx`), misurando i tempi di esecuzione e l'efficienza dello *speedup* al variare dei thread e dei flag di ottimizzazione.
 
@@ -6,19 +6,19 @@ Questo report documenta il comportamento dell'algoritmo di moltiplicazione tra m
 
 | Compilatore | Ottimizzazione | Flag Architettura | Thread (OMP_NUM_THREADS) | Tempo (Secondi) |
 | :--- | :--- | :--- | :---: | :--- |
-| **ICC** | Nessuna (Base) | `-xHost` | *Tutti* (Default) | 5.389 s |
-| **ICC** | Nessuna (Base) | `-xHost` | **1** | 47.789 s |
-| **ICC** | Nessuna (Base) | `-xHost` | **8** | 9.213 s |
-| **ICC** | Nessuna (Base) | `-xHost` | **24** | 5.164 s |
-| **ICC** | `-O3` | `-xHost` | **1** | 5.047 s |
-| **ICC** | `-O3` | `-xHost` | **8** | 0.816 s |
-| **ICC** | `-O3` | `-xHost` | **24** | 0.604 s |
-| **ICX** | Nessuna (Base) | `-xHost` | **1** | 4.995 s |
-| **ICX** | Nessuna (Base) | `-xHost` | **8** | 0.840 s |
-| **ICX** | Nessuna (Base) | `-xHost` | **24** | 0.607 s |
-| **ICX** | `-O3` | `-xHost` | **1** | 4.790 s |
-| **ICX** | `-O3` | `-xHost` | **8** | 0.660 s |
-| **ICX** | `-O3` | `-xHost` | **24** | 0.656 s |
+| **ICC** (Classic) | Nessuna (Base) | `-xHost` | *Tutti* (Default) | 5.389 s |
+| **ICC** (Classic) | Nessuna (Base) | `-xHost` | **1** | 47.789 s |
+| **ICC** (Classic) | Nessuna (Base) | `-xHost` | **8** | 9.213 s |
+| **ICC** (Classic) | Nessuna (Base) | `-xHost` | **24** | 5.164 s |
+| **ICC** (Classic) | `-O3` | `-xHost` | **1** | 5.047 s |
+| **ICC** (Classic) | `-O3` | `-xHost` | **8** | 0.816 s |
+| **ICC** (Classic) | `-O3` | `-xHost` | **24** | 0.604 s |
+| **ICX** (LLVM) | Nessuna (Base) | `-xHost` | **1** | 4.995 s |
+| **ICX** (LLVM) | Nessuna (Base) | `-xHost` | **8** | 0.840 s |
+| **ICX** (LLVM) | Nessuna (Base) | `-xHost` | **24** | 0.607 s |
+| **ICX** (LLVM) | `-O3` | `-xHost` | **1** | 4.790 s |
+| **ICX** (LLVM) | `-O3` | `-xHost` | **8** | 0.660 s |
+| **ICX** (LLVM) | `-O3` | `-xHost` | **24** | 0.656 s |
 
 ---
 
