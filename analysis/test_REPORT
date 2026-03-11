@@ -130,6 +130,19 @@ Se il professore ti chiede "Perché non $i-j-k$?", la tua risposta, basata su qu
 In C, saltare di riga in riga significa saltare di $N$ posizioni in memoria (stride-$N$). 
 Questo carica una cache line da 64 byte per usare un solo double, sprecando gli altri 7 e saturando la banda di memoria inutilmente. Con $i-k-j$ li consumo tutti e 8."
 
+
+TEST: icx -xHost -O3 matrixmult_opt_final.c -o TestAlign
+
+ALIGNED CASE
+Size: n=8000 - Total Execution Time: 22.6258 seconds
+Size: n=10000 - Total Execution Time: 43.9144 seconds
+Size: n=15000 - Total Execution Time: 178.3673 seconds
+
+NOT ALIGNED CASE
+Size: n=8000 - Total Execution Time: 37.1103 seconds
+Size: n=10000 - Total Execution Time: 71.4459 seconds
+Size: n=15000 - Total Execution Time: 235.0233 seconds
+
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 - OpenMP / MPI
@@ -160,3 +173,5 @@ Finché la matrice è "normale" (es. $n=5000$), questo basta e avanza.
 Quando la matrice diventa un mostro gigante da 5 GigaByte ($n=15000$), i dati iniziano a intasarmi anche la cache L2 e L3. 
 La libreria CBLAS fa il Multi-level Tiling: taglia la matrice in pezzi grandi per la L3, poi ri-taglia quei pezzi in pezzi medi per la L2, e infine li taglia in pezzettini per la L1. 
 Così facendo, non spreca nemmeno un byte di spazio in tutta la gerarchia della memoria.
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
