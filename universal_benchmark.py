@@ -313,7 +313,8 @@ class LaTeXWriter:
         with open(filename, "w") as f:
             cols = "c|" + "c" * (len(headers)-1)
             f.write(f"\\begin{{tabular}}{{{cols}}}\n")
-            f.write(" & ".join(headers) + " \\\\\n")
+            # Convert all items in headers to strings before joining
+            f.write(" & ".join(str(header) for header in headers) + " \\\\\n")
             f.write("\\hline\n")
             for r in rows:
                 formatted = [f"{x:.3f}" if isinstance(x, float) else str(x) for x in r]
