@@ -85,6 +85,11 @@ Nel ciclo interno di j, il computer ora fa solo: RegistroA * ValoreB + ValoreC. 
 Questa è un'ottima implementazione di Loop Tiling + Loop Unrolling Manuale (grazie a temp_a).
 
 
+La Register Promotion è un'importante tecnica di ottimizzazione utilizzata dai compilatori per rendere l'esecuzione di un programma molto più veloce.
+In sintesi, consiste nel prendere una variabile o un valore che normalmente verrebbe salvato e letto continuamente dalla memoria centrale (o dalla cache) e "promuoverlo", ovvero spostarlo temporaneamente all'interno di un registro della CPU.
+Se il tuo programma ha un'istruzione che aggiorna continuamente lo stesso valore (ad esempio, un contatore dentro un ciclo infinito o un accumulatore), leggere e scrivere quel valore in memoria a ogni singolo passaggio rallenta enormemente l'esecuzione.
+
+
 TEST CONFERMATI
 - CASO NULLO: MEGLIO CON TEMP PER TECNICA DI REGISTRI
 - CASO -O3: NESSUNA VARIAZIONE IN QUANTO LO FA IN AUTOMATICO
@@ -124,3 +129,8 @@ Se il professore ti chiede "Perché non $i-j-k$?", la tua risposta, basata su qu
 "Perché in $i-j-k$ il ciclo interno varia la $k$. Quindi b[k][j] salta di riga in riga. 
 In C, saltare di riga in riga significa saltare di $N$ posizioni in memoria (stride-$N$). 
 Questo carica una cache line da 64 byte per usare un solo double, sprecando gli altri 7 e saturando la banda di memoria inutilmente. Con $i-k-j$ li consumo tutti e 8."
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+- OpenMP / MPI
+Nota importante da fare sull'architettura: Note the hybrid core architecture, which presents specific load-balancing challenges for shared-memory parallelization.
