@@ -57,17 +57,17 @@ Intel Advisor:
 
 find /opt/intel -name "advixe-vars.sh" 2>/dev/null dovrebbe dare come output: 
 /opt/intel/oneapi/advisor/2023.2.0/advixe-vars.sh
-
+-
 2- icx -g -qopenmp -xHost -O3 -fma -lm omp_matrixmult_tiling_hardcoded.c -o omp_matrixmult_tiling_hardcoded
-
+-
 3- advixe-cl --collect survey --project-dir ./progetto_advisor -- ./omp_matrixmult_tiling_hardcoded
-
+-
 4- advixe-cl --collect tripcounts -flops --project-dir ./progetto_advisor -- ./omp_matrixmult_tiling_hardcoded
-
+-
 5- advixe-cl --collect roofline --project-dir ./progetto_advisor -- ./omp_matrixmult_tiling_hardcoded
-
+-
 6- advixe-cl --report roofline --project-dir ./progetto_advisor --report-output=./report_finale.html
-
+-
 poi aprire con Google =)
 
 
