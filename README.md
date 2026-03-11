@@ -47,3 +47,15 @@ Costi Energetici: Consumo in KWatt e impronta di CO2 del calcolo, poiché i cost
     .
 
 Desideri che ti aiuti a creare una struttura dettagliata per il report, includendo come visualizzare graficamente queste metriche?
+
+
+
+--------------
+Intel Advisor: 
+
+Trovare percorso a intel advisor:
+
+S4684857@wk006:~$ find /opt/intel -name "advixe-vars.sh" 2>/dev/null
+/opt/intel/oneapi/advisor/2023.2.0/advixe-vars.sh
+
+
