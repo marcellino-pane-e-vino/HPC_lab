@@ -151,3 +151,12 @@ Total Execution Time: 212.4810 seconds
 Gli stessi risultati li otteniamo ovviamente anche con gli altri compilatori, quindi non ha senso portarli.
 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+OPTIMIZED VS LIBRARY
+
+Il tuo Tiling ha una sola marcia, CBLAS ne ha tre.
+Il tuo codice (Single-Level Tiling) taglia la matrice a blocchetti di dimensione $B=64$ pensati solo per la cache L1 (quella più piccola e veloce). 
+Finché la matrice è "normale" (es. $n=5000$), questo basta e avanza.
+Quando la matrice diventa un mostro gigante da 5 GigaByte ($n=15000$), i dati iniziano a intasarmi anche la cache L2 e L3. 
+La libreria CBLAS fa il Multi-level Tiling: taglia la matrice in pezzi grandi per la L3, poi ri-taglia quei pezzi in pezzi medi per la L2, e infine li taglia in pezzettini per la L1. 
+Così facendo, non spreca nemmeno un byte di spazio in tutta la gerarchia della memoria.
