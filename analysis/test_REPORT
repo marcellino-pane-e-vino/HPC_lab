@@ -175,3 +175,12 @@ La libreria CBLAS fa il Multi-level Tiling: taglia la matrice in pezzi grandi pe
 Così facendo, non spreca nemmeno un byte di spazio in tutta la gerarchia della memoria.
 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+FMIN VS MACRO MIN
+fmin è una funzione della libreria standard definita per lavorare su double.
+
+GCC: Tende a essere più conservativo. Se scrivi fmin, lui genera una chiamata a una funzione esterna o, se ottimizzato, inserisce istruzioni per virgola mobile. Se i tuoi indici sono int, GCC deve convertire int -> double, calcolare il minimo, e riconvertire double -> int. Questo "cast" distrugge la pipeline di esecuzione nei loop più interni.
+
+ICX: Essendo un compilatore Intel, riconosce che fmin applicato a variabili che derivano da indici di loop interi è ridondante. ICX esegue quella che si chiama Idiom Recognition: capisce che la tua "intenzione" è un MIN(a, b) tra interi e sostituisce silenziosamente la pesante fmin con un'istruzione assembly cmov (conditional move) o minpd molto più leggera.
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
