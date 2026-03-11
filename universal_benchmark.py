@@ -28,6 +28,7 @@ import csv
 import sys
 from pathlib import Path
 import os
+import hashlib
 
 # ==========================================================
 # ====================== TERMINAL UTILS ===================
@@ -299,7 +300,7 @@ class CSVWriter:
             writer.writerow(headers)
             for r in rows:
                 writer.writerow(r)
-        success("CSV export complete")
+        success(f"CSV export complete to {filename}")
 
 # ==========================================================
 # ====================== LATEX WRITER ======================
@@ -310,6 +311,10 @@ class LaTeXWriter:
     @staticmethod
     def write(filename, headers, rows):
         info(f"Writing LaTeX table → {filename}")
+        # Ensure the output directory exists
+        tex_folder = Path(__file__).parent / "latex_results"
+        tex_folder.mkdir(parents=True, exist_ok=True)
+
         with open(filename, "w") as f:
             cols = "c|" + "c" * (len(headers)-1)
             f.write(f"\\begin{{tabular}}{{{cols}}}\n")
@@ -320,7 +325,75 @@ class LaTeXWriter:
                 formatted = [f"{x:.3f}" if isinstance(x, float) else str(x) for x in r]
                 f.write(" & ".join(formatted) + " \\\\\n")
             f.write("\\end{tabular}\n")
-        success("LaTeX export complete")
+        success(f"LaTeX export complete to {filename}")
+
+# ==========================================================
+# ====================== FILENAME GENERATOR =================
+# ==========================================================
+
+class FilenameGenerator:
+    """
+    Generates descriptive filenames for the experiment results.
+    """
+
+    @staticmethod
+    def generate_experiment_name(mode, args):
+        """
+        Generate a descriptive filename based on experiment mode and arguments.
+        """
+        # Start with a constant prefix "results"
+        experiment_name = "results"
+
+        if mode == "threads_vs_size":
+            # Define sections for threads_vs_size mode
+            experiment_name += f"|threads_vs_size"
+            experiment_name += f"|threads={'|'.join(map(str, THREAD_VALUES))}"  # Use "|" to separate threads
+            experiment_name += f"|matrix_sizes={'|'.join(map(str, MATRIX_SIZES))}"  # Use "|" to separate matrix sizes
+
+        elif mode == "program_vs_size":
+            # Define sections for program_vs_size mode
+            experiment_name += f"|program_vs_size"
+            experiment_name += f"|programs={'|'.join([p['file'] for p in PROGRAMS])}"  # Use "|" to separate program names
+            experiment_name += f"|matrix_sizes={'|'.join(map(str, MATRIX_SIZES))}"  # Use "|" to separate matrix sizes
+
+        elif mode == "compiler_vs_flags":
+            # Define sections for compiler_vs_flags mode
+            experiment_name += f"|compiler_vs_flags"
+            experiment_name += f"|configs={'|'.join(['_'.join(config) for config in OPT_CONFIGS])}"  # Use "|" to separate config combinations
+            experiment_name += f"|compilers={'|'.join(COMPILERS)}"  # Use "|" to separate compilers
+
+        else:
+            error(f"Unsupported mode: {mode}")
+            return ""
+
+        # Append flags section
+        experiment_name += f"|flags={'+'.join(SINGLE_CONFIG)}"  # Use "+" to separate flags
+
+        # Truncate filename to 255 characters if necessary
+        if len(experiment_name) > 255:
+            # To avoid long filenames, we hash the argument section after the initial truncation.
+            name_hash = hashlib.md5(experiment_name.encode('utf-8')).hexdigest()[:8]
+            experiment_name = experiment_name[:240] + f"+{name_hash}"
+
+        return experiment_name
+
+    @staticmethod
+    def generate_csv_filename(mode, headers, rows):
+        """
+        Generate the CSV filename.
+        """
+        experiment_name = FilenameGenerator.generate_experiment_name(mode, headers)
+        return Path(OUTPUT_FOLDER) / f"{experiment_name}.csv"
+
+    @staticmethod
+    def generate_tex_filename(mode, headers, rows):
+        """
+        Generate the LaTeX filename and place it in a different folder.
+        """
+        experiment_name = FilenameGenerator.generate_experiment_name(mode, headers)
+        tex_folder = OUTPUT_FOLDER / "latex_results"
+        tex_folder.mkdir(parents=True, exist_ok=True)
+        return tex_folder / f"{experiment_name}.tex"
 
 # ==========================================================
 # ====================== BENCHMARKS ========================
@@ -407,8 +480,9 @@ def main():
     else:
         error("Unsupported benchmark mode")
 
-    csv_file = OUTPUT_FOLDER / f"{MODE}.csv"
-    tex_file = OUTPUT_FOLDER / f"{MODE}.tex"
+    # Generate filenames using the FilenameGenerator
+    csv_file = FilenameGenerator.generate_csv_filename(MODE, headers, rows)
+    tex_file = FilenameGenerator.generate_tex_filename(MODE, headers, rows)
 
     CSVWriter.write(csv_file, headers, rows)
     LaTeXWriter.write(tex_file, headers, rows)
