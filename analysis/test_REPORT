@@ -134,3 +134,20 @@ Questo carica una cache line da 64 byte per usare un solo double, sprecando gli 
 
 - OpenMP / MPI
 Nota importante da fare sull'architettura: Note the hybrid core architecture, which presents specific load-balancing challenges for shared-memory parallelization.
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Nota riguardante l'identificazione dell'hotspot.
+Test e seguiti sulla baseline, senza optimization flag.
+Size: n=2500, n=5000
+Compiler: GCC
+
+Critical section - Execution Time: 26.5572 seconds
+Total Execution Time: 26.7234 seconds
+
+Critical section - Execution Time: 212.2355 seconds
+Total Execution Time: 212.4810 seconds
+
+Gli stessi risultati li otteniamo ovviamente anche con gli altri compilatori, quindi non ha senso portarli.
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
