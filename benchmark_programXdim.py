@@ -33,27 +33,23 @@ from pathlib import Path
 # ----------------------------------------------------------
 
 PROGRAMS = [
-
-    {
-        "file": "matrixmult_opt.c",
-        "type": "sequential"
-    },
-
     {
         "file": "omp_matrixmult.c",
         "type": "openmp"
-    }
+    },
 
+    {
+        "file": "omp_matrixmult_tiling.c",
+        "type": "openmp"
+    }
 ]
 
 # ----------------------------------------------------------
 # Benchmark parameters
 # ----------------------------------------------------------
 
-N_VALUES = [1000, 2000, 3000]
-
+N_VALUES = [1000, 5000, 10000, 15000]
 RUNS_PER_N = 1
-
 N_THREADS = 24
 
 # ----------------------------------------------------------
