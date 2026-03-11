@@ -52,44 +52,64 @@ def error(msg):
 # ==========================================================
 
 MODE = "program_vs_size"
+DEFAULT_COMPILER = "icx"
 # OPTIONS: "threads_vs_size", "program_vs_size", "compiler_vs_flags"
+
+RUNS_PER_TEST = 1
 
 # ==========================================================
 # ====================== PROGRAM CONFIG ====================
 # ==========================================================
 
-PROGRAMS = [
-    {"file": "matrixmult_library.c", "type": "sequential"},
-    {"file": "omp_matrixmult.c", "type": "openmp"}
-]
+# ======================== threads_vs_size ========================
+if MODE == "threads_vs_size":
+    SINGLE_PROGRAM = {"file": "omp_matrixmult_tiling.c", "type": "openmp"}
+    if SINGLE_PROGRAM["type"] == "sequential":
+            error("Error: In 'threads_vs_size' mode, the program type cannot be 'sequential'. Please choose another program type.")
 
-SINGLE_PROGRAM = {"file": "matrixmult_opt.c", "type": "sequential"}
+    MATRIX_SIZES = [1000, 2000, 3000]
+    THREAD_VALUES = [8, 16, 24]
+    DEFAULT_COMPILER = "icx"
+    SINGLE_FLAGSET = ["OPT_O3", "MATH_LIB", "CPU_NATIVE", "FAST"]
 
-# ==========================================================
-# ====================== SINGLE CONFIG =====================
-# ==========================================================
-# This will be used in "threads_vs_size" and "program_vs_size" modes.
-SINGLE_CONFIG = ["OPT_O3", "MATH_LIB", "CPU_NATIVE", "FAST"]
 
-# ==========================================================
-# ====================== PARAMETERS ========================
-# ==========================================================
 
-MATRIX_SIZES = [1000, 2000, 3000]
-THREAD_VALUES = [8, 16, 24]
-COMPILERS = ["gcc", "icc", "icx"]
-RUNS_PER_TEST = 1
-N_THREADS = 24
-N_VALUE = 300
 
+# ======================== program_vs_size ========================
+elif MODE == "program_vs_size":
+    PROGRAMS = [
+        {"file": "matrixmult_library.c", "type": "sequential"},
+        {"file": "omp_matrixmult.c", "type": "openmp"}
+    ]
+    MATRIX_SIZES = [1000, 2000, 3000]
+    N_THREADS = 24
+    DEFAULT_COMPILER = "icx"
+    SINGLE_FLAGSET = ["OPT_O3", "MATH_LIB", "CPU_NATIVE", "FAST"]
+
+
+
+# ======================== compiler_vs_flags ========================
+# For experiments where we vary the compiler vs optimization flags
+elif MODE == "compiler_vs_flags":
+    SINGLE_PROGRAM = {"file": "omp_matrixmult.c", "type": "openmp"}
+    SINGLE_MATRIX_SIZE = 2500
+    N_THREADS = 24
+    COMPILERS = ["gcc", "icc", "icx"]
+    FLAGSETS = [
+        [],
+        ["OPT_O3", "MATH_LIB", "CPU_NATIVE", "FAST", "MEMORY_ALIGNMENT", "INLINE", "LINKING"]
+    ]
+
+    # Parameters for compiler_vs_flags
+
+
+
+else:
+    raise ValueError(f"Unsupported mode: {MODE}")
 # ==========================================================
 # ====================== FLAG SYSTEM =======================
 # ==========================================================
 
-OPT_CONFIGS = [
-    ["OPT_O3", "MATH_LIB", "CPU_NATIVE", "FAST", "MEMORY_ALIGNMENT", "INLINE"],
-    ["OPT_O3", "MATH_LIB", "CPU_NATIVE", "FAST", "MEMORY_ALIGNMENT", "INLINE", "LINKING"]
-]
 
 FLAG_ALIASES = {
     "OPT_O3": {"gcc": ["-O3"], "icc": ["-O3"], "icx": ["-O3"]},
@@ -106,7 +126,7 @@ FLAG_ALIASES = {
 # ================= PROGRAM TYPE SYSTEM ====================
 # ==========================================================
 
-DEFAULT_COMPILER = "icx"
+
 
 PROGRAM_TYPES = {
     "sequential": {
@@ -143,22 +163,121 @@ OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
 class Validator:
 
     @staticmethod
+    def _compiler_available(compiler):
+        """
+        Check if a compiler is available.
+        Intel compilers require sourcing OneAPI.
+        """
+        try:
+            if compiler in ["icc", "icx"]:
+                cmd = f"source /opt/intel/oneapi/setvars.sh >/dev/null 2>&1 && {compiler} --version"
+                result = subprocess.run(
+                    ["bash", "-c", cmd],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+            else:
+                result = subprocess.run(
+                    [compiler, "--version"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+
+            return result.returncode == 0
+
+        except Exception:
+            return False
+
+
+    @staticmethod
     def validate():
         info("Validating configuration...")
 
+        # --------------------------------------------------
+        # Validate MODE
+        # --------------------------------------------------
+
         valid_modes = ["threads_vs_size", "program_vs_size", "compiler_vs_flags"]
+
         if MODE not in valid_modes:
             error(f"Invalid MODE '{MODE}'. Choose from: {valid_modes}")
 
-        for p in PROGRAMS + [SINGLE_PROGRAM]:
-            path = Path(p["file"])
+        # --------------------------------------------------
+        # threads_vs_size
+        # --------------------------------------------------
+
+        if MODE == "threads_vs_size":
+
+            program_path = Path(SINGLE_PROGRAM["file"])
+
+            if not program_path.exists():
+                error(f"Source file not found: {program_path}")
+
+            if not all(t > 0 for t in THREAD_VALUES):
+                error(f"Invalid thread values: {THREAD_VALUES}. Threads must be positive.")
+
+            if not all(m > 0 for m in MATRIX_SIZES):
+                error(f"Invalid matrix sizes: {MATRIX_SIZES}. Matrix sizes must be positive.")
+
+        # --------------------------------------------------
+        # program_vs_size
+        # --------------------------------------------------
+
+        elif MODE == "program_vs_size":
+
+            for program in PROGRAMS:
+                program_path = Path(program["file"])
+
+                if not program_path.exists():
+                    error(f"Source file not found: {program_path}")
+
+            if not all(m > 0 for m in MATRIX_SIZES):
+                error(f"Invalid matrix sizes: {MATRIX_SIZES}. Matrix sizes must be positive.")
+
+        # --------------------------------------------------
+        # compiler_vs_flags
+        # --------------------------------------------------
+
+        elif MODE == "compiler_vs_flags":
+
+            available_compilers = []
+
+            for compiler in COMPILERS:
+
+                if Validator._compiler_available(compiler):
+                    available_compilers.append(compiler)
+                    info(f"Compiler '{compiler}' detected")
+                else:
+                    warn(f"Compiler '{compiler}' not available")
+
+            if not available_compilers:
+                error("No working compilers found (gcc / icc / icx).")
+
+            # Validate flag aliases
+            for flags in FLAGSETS:
+                for flag in flags:
+
+                    if flag not in FLAG_ALIASES:
+                        error(f"Invalid flag alias: {flag}. Check FLAG_ALIASES dictionary.")
+
+        # --------------------------------------------------
+        # Check required program files
+        # --------------------------------------------------
+
+        required_files = [
+            "matrixmult_opt.c",
+            "omp_matrixmult.c",
+            "matrixmult_library.c"
+        ]
+
+        for file in required_files:
+
+            path = Path(file)
+
             if not path.exists():
-                error(f"Source file not found: {path}")
+                error(f"Required file not found: {path}")
 
-        for c in COMPILERS:
-            if subprocess.call(["which", c], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) != 0:
-                warn(f"Compiler '{c}' not found in PATH")
-
+        success("Configuration validated")
         success("Configuration validated")
 
 # ==========================================================
@@ -345,21 +464,23 @@ class FilenameGenerator:
         experiment_name = "results"
 
         if mode == "threads_vs_size":
-            # Define sections for threads_vs_size mode
             experiment_name += f"|threads_vs_size"
+            
+            experiment_name += f"|programs={SINGLE_PROGRAM['file']}"
             experiment_name += f"|threads={'|'.join(map(str, THREAD_VALUES))}"  # Use "|" to separate threads
             experiment_name += f"|matrix_sizes={'|'.join(map(str, MATRIX_SIZES))}"  # Use "|" to separate matrix sizes
 
         elif mode == "program_vs_size":
-            # Define sections for program_vs_size mode
             experiment_name += f"|program_vs_size"
+
             experiment_name += f"|programs={'|'.join([p['file'] for p in PROGRAMS])}"  # Use "|" to separate program names
             experiment_name += f"|matrix_sizes={'|'.join(map(str, MATRIX_SIZES))}"  # Use "|" to separate matrix sizes
 
         elif mode == "compiler_vs_flags":
-            # Define sections for compiler_vs_flags mode
             experiment_name += f"|compiler_vs_flags"
-            experiment_name += f"|configs={'|'.join(['_'.join(config) for config in OPT_CONFIGS])}"  # Use "|" to separate config combinations
+
+            experiment_name += f"|programs={SINGLE_PROGRAM['file']}"
+            experiment_name += f"|configs={'|'.join(['_'.join(config) for config in FLAGSETS])}"  # Use "|" to separate config combinations
             experiment_name += f"|compilers={'|'.join(COMPILERS)}"  # Use "|" to separate compilers
 
         else:
@@ -367,7 +488,7 @@ class FilenameGenerator:
             return ""
 
         # Append flags section
-        experiment_name += f"|flags={'+'.join(SINGLE_CONFIG)}"  # Use "+" to separate flags
+
 
         # Truncate filename to 255 characters if necessary
         if len(experiment_name) > 255:
@@ -405,7 +526,7 @@ class Benchmarks:
     def threads_vs_size():
         program = SINGLE_PROGRAM
         compiler = PROGRAM_TYPES[program["type"]]["compiler"]
-        flags = build_flags(program, compiler, SINGLE_CONFIG)
+        flags = build_flags(program, compiler, SINGLE_FLAGSET)
         binary = Compiler.compile(program, compiler, flags)
 
         headers = ["threads"] + MATRIX_SIZES
@@ -417,7 +538,9 @@ class Benchmarks:
                 times = [Executor.run(binary, n, t) for _ in range(RUNS_PER_TEST)]
                 row.append(statistics.mean(times))
             rows.append(row)
+
         return headers, rows
+
 
     @staticmethod
     def program_vs_size():
@@ -426,29 +549,48 @@ class Benchmarks:
 
         for program in PROGRAMS:
             compiler = PROGRAM_TYPES[program["type"]]["compiler"]
-            flags = build_flags(program, compiler, SINGLE_CONFIG)
+            flags = build_flags(program, compiler, SINGLE_FLAGSET)
+
             binary = Compiler.compile(program, compiler, flags)
+
             row = [program["file"]]
+
             for n in MATRIX_SIZES:
                 times = [Executor.run(binary, n, N_THREADS) for _ in range(RUNS_PER_TEST)]
                 row.append(statistics.mean(times))
+
             rows.append(row)
+
         return headers, rows
+
 
     @staticmethod
     def compiler_vs_flags():
+
         program = SINGLE_PROGRAM
         headers = ["config"] + COMPILERS
         rows = []
 
-        for config in OPT_CONFIGS:
+        for config in FLAGSETS:
+
             row = ["_".join(config)]
+
             for compiler in COMPILERS:
-                flags = expand_flags(compiler, config)
+
+                # IMPORTANT: include program type flags (OpenMP)
+                flags = build_flags(program, compiler, config)
+
                 binary = Compiler.compile(program, compiler, flags)
-                times = [Executor.run(binary, N_VALUE, N_THREADS) for _ in range(RUNS_PER_TEST)]
+
+                times = [
+                    Executor.run(binary, SINGLE_MATRIX_SIZE, N_THREADS)
+                    for _ in range(RUNS_PER_TEST)
+                ]
+
                 row.append(statistics.mean(times))
+
             rows.append(row)
+
         return headers, rows
 
 # ==========================================================
@@ -460,11 +602,29 @@ def print_experiment_summary():
     print("Benchmark Configuration")
     print("------------------------------------------------")
     print(f"Mode           : {MODE}")
-    print(f"Matrix sizes   : {MATRIX_SIZES}")
-    print(f"Threads        : {THREAD_VALUES}")
-    print(f"Compilers      : {COMPILERS}")
-    print(f"Runs per test  : {RUNS_PER_TEST}")
-    print("================================================\n")
+    # Print Threads only for threads_vs_size mode
+    if MODE == "threads_vs_size":
+        print(f"1. Program:\t{SINGLE_PROGRAM}")
+        print(f"2. Matrix size:\t{MATRIX_SIZES}")
+        print(f"3. N threads:\t{THREAD_VALUES}")
+        print(f"4. Compiler:\t{DEFAULT_COMPILER}")
+        print(f"5. Flagset\t{SINGLE_FLAGSET}")
+
+    elif MODE == "program_vs_size":
+        print(f"1. Program:\t{PROGRAMS}")
+        print(f"2. Matrix size:\t{MATRIX_SIZES}")
+        print(f"3. N threads:\t{N_THREADS}")
+        print(f"4. Compiler:\t{DEFAULT_COMPILER}")
+        print(f"5. Flagset\t{SINGLE_FLAGSET}")
+
+    elif MODE == "compiler_vs_flags":
+        print(f"1. Program:\t{SINGLE_PROGRAM}")
+        print(f"2. Matrix size:\t{SINGLE_MATRIX_SIZE}")
+        print(f"3. N threads:\t{N_THREADS}")
+        print(f"4. Compiler:\t{COMPILERS}")
+        print(f"5. Flagset\t{FLAGSETS}")
+    else:
+        print("Invalid mode")
 
 def main():
     info("Starting Universal Benchmark Framework")
@@ -491,3 +651,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# program | size | thread | compiler | flags
