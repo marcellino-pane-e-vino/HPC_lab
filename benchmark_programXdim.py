@@ -1,230 +1,442 @@
 #!/usr/bin/env python3
 """
 ============================================================
-C Benchmark Framework with Absolute Paths & Dynamic CSV
+C Benchmark Framework
+Program vs Problem Size
+============================================================
+
+Benchmark multiple implementations across different
+problem sizes with automatic compiler/runtime handling.
+
+Features
+--------
+• Program type abstraction (sequential, OpenMP, MPI, CUDA)
+• Layered flag system
+• Automatic compiler selection
+• Clean execution modes
+• CSV output for benchmarking data
 ============================================================
 """
 
-# ==========================================================
-# ================== CONFIGURATION =========================
-# ==========================================================
-
-import re
+import subprocess
+import statistics
+import csv
+import sys
 from pathlib import Path
-import os
 
-C_FILES = [
-    #"matrixmult.c",
-    "matrixmult_opt.c",
-    "matrixmult_opt_NOALIGN.c",
-    "matrixmult_library.c"
+# ==========================================================
+# ====================== CONFIGURATION =====================
+# ==========================================================
+
+# ----------------------------------------------------------
+# Programs to benchmark
+# ----------------------------------------------------------
+
+PROGRAMS = [
+
+    {
+        "file": "matrixmult_opt.c",
+        "type": "sequential"
+    },
+
+    {
+        "file": "omp_matrixmult.c",
+        "type": "openmp"
+    }
+
 ]
 
-N_VALUES = [1000, 2000, 3000, 5000, 10000]
+# ----------------------------------------------------------
+# Benchmark parameters
+# ----------------------------------------------------------
+
+N_VALUES = [1000, 2000, 3000]
 
 RUNS_PER_N = 1
 
-COMPILER = "gcc"
+N_THREADS = 24
 
-COMPILER_FLAGS = [
-    "-O3",
-    "-lm",
-    "-march=native"
+# ----------------------------------------------------------
+# Default compiler
+# ----------------------------------------------------------
+
+DEFAULT_COMPILER = "gcc"
+
+# ----------------------------------------------------------
+# Global optimization flags
+# ----------------------------------------------------------
+
+GLOBAL_FLAGS = [
+    "OPT_O3",
+    "MATH_LIB",
+    "CPU_NATIVE"
 ]
 
-# create output folder "benchmarks" in the same folder as the script
-output_folder = Path(__file__).parent / "benchmarks"
-output_folder.mkdir(parents=True, exist_ok=True)
+# ----------------------------------------------------------
+# Program type configuration
+# ----------------------------------------------------------
 
-file_stems = "_".join(Path(f).stem for f in C_FILES)
+PROGRAM_TYPES = {
+
+    "sequential": {
+
+        "compiler": DEFAULT_COMPILER,
+
+        "compile_prefix": [],
+        "compile_suffix": [],
+
+        "run_mode": "normal"
+    },
+
+    "openmp": {
+
+        "compiler": DEFAULT_COMPILER,
+
+        "compile_prefix": ["OPENMP"],
+        "compile_suffix": [],
+
+        "run_mode": "openmp"
+    },
+
+    "mpi": {
+
+        "compiler": "mpicc",
+
+        "compile_prefix": [],
+        "compile_suffix": [],
+
+        "run_mode": "mpi"
+    },
+
+    "cuda": {
+
+        "compiler": "nvcc",
+
+        "compile_prefix": [],
+        "compile_suffix": [],
+
+        "run_mode": "cuda"
+    }
+}
+
+# ----------------------------------------------------------
+# Flag aliases
+# ----------------------------------------------------------
+
+FLAG_ALIASES = {
+
+    "OPT_O3": {
+        "gcc": ["-O3"],
+        "icc": ["-O3"],
+        "icx": ["-O3"],
+        "nvcc": ["-O3"]
+    },
+
+    "MATH_LIB": {
+        "gcc": ["-lm"],
+        "icc": ["-lm"],
+        "icx": ["-lm"]
+    },
+
+    "CPU_NATIVE": {
+        "gcc": ["-march=native"],
+        "icc": ["-xHost"],
+        "icx": ["-xHost"]
+    },
+
+    "FAST": {
+        "gcc": ["-Ofast"],
+        "icc": ["-Ofast"],
+        "icx": ["-fast"]
+    },
+
+    "OPENMP": {
+        "gcc": ["-fopenmp"],
+        "icc": ["-qopenmp"],
+        "icx": ["-fopenmp"]
+    }
+
+}
+
+# ==========================================================
+# ===================== OUTPUT SETUP =======================
+# ==========================================================
+
+OUTPUT_FOLDER = Path(__file__).parent / "benchmarks"
+OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
+
+program_names = "_".join(Path(p["file"]).stem for p in PROGRAMS)
 n_values_str = "_".join(str(n) for n in N_VALUES)
-flags_str = "_".join(f.replace("-", "") for f in COMPILER_FLAGS)
-safe_flags_str = re.sub(r"[^\w]+", "_", flags_str)
 
-OUTPUT_CSV = output_folder / f"results|{COMPILER}|{file_stems}|{n_values_str}|{safe_flags_str}.csv"
+OUTPUT_CSV = OUTPUT_FOLDER / f"results_{program_names}_{n_values_str}.csv"
 
 # ==========================================================
-# ============== DO NOT MODIFY BELOW ======================
+# ===================== FLAG UTILITIES =====================
 # ==========================================================
 
-import subprocess
-import csv
-import statistics
-import sys
+def expand_flags(compiler, config):
+
+    flags = []
+
+    for alias in config:
+
+        flags.extend(
+            FLAG_ALIASES.get(alias, {}).get(compiler, [])
+        )
+
+    return flags
 
 
-class _Compiler:
-    """Handles compilation of C source files."""
+def build_flags(program):
+
+    ptype = program["type"]
+
+    type_info = PROGRAM_TYPES[ptype]
+
+    flags = []
+
+    flags += type_info.get("compile_prefix", [])
+    flags += GLOBAL_FLAGS
+    flags += program.get("flags", [])
+    flags += type_info.get("compile_suffix", [])
+
+    compiler = type_info.get("compiler", DEFAULT_COMPILER)
+
+    return expand_flags(compiler, flags)
+
+
+# ==========================================================
+# ======================== COMPILER ========================
+# ==========================================================
+
+class Compiler:
 
     @staticmethod
-    def compile(source_file: Path):
+    def compile(program):
 
-        source_file = source_file.resolve()
+        source_file = Path(program["file"]).resolve()
 
-        if source_file.name == "matrixmult_library.c":
+        if not source_file.exists():
 
-            build_script = source_file.parent / "build_matrixmult.sh"
+            print(f"[ERROR] Source file not found: {source_file}")
+            sys.exit(1)
 
-            if not build_script.exists():
-                print(f"[ERROR] Build script not found: {build_script}")
-                sys.exit(1)
+        ptype = program["type"]
 
-            if not os.access(build_script, os.X_OK):
-                print(f"[INFO] Build script not executable. Fixing permissions...")
-                try:
-                    os.chmod(build_script, 0o755)
-                except Exception as e:
-                    print(f"[ERROR] Failed to set execute permission: {e}")
-                    sys.exit(1)
+        type_info = PROGRAM_TYPES[ptype]
 
-            print(f"[INFO] Running build script for {source_file} ...")
+        compiler = type_info.get("compiler", DEFAULT_COMPILER)
 
-            try:
-                subprocess.run([str(build_script)], check=True)
-            except subprocess.CalledProcessError:
-                print(f"[ERROR] Build script failed for {source_file}")
-                sys.exit(1)
+        flags = build_flags(program)
 
-            binary = source_file.parent / "matrixmult"
+        safe_flags = "_".join(f.replace("-", "") for f in flags)
 
-            if not binary.exists():
-                print(f"[ERROR] Expected executable not found: {binary}")
-                sys.exit(1)
+        binary = OUTPUT_FOLDER / f"{source_file.stem}_{safe_flags}"
 
-            print(f"[OK] Build script completed: {binary}")
-            return binary
+        print("\n[COMPILING]")
+        print(f"  Program  : {source_file.name}")
+        print(f"  Type     : {ptype}")
+        print(f"  Compiler : {compiler}")
+        print(f"  Flags    : {' '.join(flags)}")
 
-        binary = source_file.with_suffix("").resolve()
+        normal_flags = [f for f in flags if f != "-lm"]
+        lm_flags = ["-lm"] if "-lm" in flags else []
 
-        print(f"[INFO] Compiling '{source_file}' -> '{binary}' ...")
-
-        cmd = [COMPILER, str(source_file), "-o", str(binary)] + COMPILER_FLAGS
+        cmd = [compiler, str(source_file), "-o", str(binary)] + normal_flags + lm_flags
 
         try:
 
-            if COMPILER == "icx":
-                compile_command = " ".join(cmd)
-                subprocess.run(
-                    [
-                        "bash",
-                        "-c",
-                        f"source /opt/intel/oneapi/setvars.sh > /dev/null 2>&1 && {compile_command}",
-                    ],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                )
+            subprocess.run(
+                cmd,
+                check=True,
+                capture_output=True,
+                text=True
+            )
 
-            else:
-                subprocess.run(
-                    cmd,
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                )
-
-            print(f"[OK] Compilation succeeded: {binary}")
+            print(f"  ✔ Compilation successful → {binary}")
 
         except subprocess.CalledProcessError as e:
-            print(f"[ERROR] Compilation failed for {source_file}")
-            print("[COMPILER OUTPUT]")
+
+            print("\n[ERROR] Compilation failed\n")
+
             print(e.stdout)
             print(e.stderr)
+
             sys.exit(1)
 
         return binary
 
 
-class _Executor:
-    """Runs compiled binaries and extracts execution time."""
+# ==========================================================
+# ======================== EXECUTOR ========================
+# ==========================================================
+
+class Executor:
 
     @staticmethod
-    def run(binary: Path, n: int) -> float:
+    def run(program, binary, n):
 
-        binary_path = str(binary.resolve())
+        ptype = program["type"]
 
-        print(f"[INFO] Running '{binary_path}' with n={n} ...")
+        run_mode = PROGRAM_TYPES[ptype]["run_mode"]
+
+        print(f"  Running benchmark (n={n})...")
+
+        if run_mode == "openmp":
+
+            cmd = [str(binary), str(n), str(N_THREADS)]
+
+        elif run_mode == "mpi":
+
+            cmd = ["mpirun", "-np", str(N_THREADS), str(binary), str(n)]
+
+        else:
+
+            cmd = [str(binary), str(n)]
 
         try:
+
             result = subprocess.run(
-                [binary_path, str(n)],
+                cmd,
                 capture_output=True,
                 text=True,
-                check=True,
+                check=True
             )
 
-        except subprocess.CalledProcessError:
-            print(f"[ERROR] Execution failed for {binary_path} with n={n}")
-            print("Check your C program for runtime errors.")
+        except subprocess.CalledProcessError as e:
+
+            print("\n[ERROR] Execution failed\n")
+
+            print(e.stdout)
+            print(e.stderr)
+
             sys.exit(1)
 
         for line in result.stdout.splitlines():
-            if "Execution Time" in line:
-                print(f"[INFO] Output received: {line.strip()}")
-                return float(line.split()[-2])
 
-        print(f"[ERROR] Execution time not found in output of {binary_path}")
-        print("Make sure your C program prints 'Execution Time: X.XXXX seconds'")
+            if "Execution Time" in line or "Tempo di esecuzione" in line:
+
+                t = float(line.split()[-2])
+
+                print(f"  ✔ Execution time: {t:.6f} s")
+
+                return t
+
+        print("[ERROR] Execution time not found in output")
+
         sys.exit(1)
 
 
-class _BenchmarkEngine:
-    """Core benchmarking logic."""
+# ==========================================================
+# ======================= BENCHMARK ========================
+# ==========================================================
 
-    def __init__(self, files, n_values, runs):
-        self.files = files
+class Benchmark:
+
+    def __init__(self, programs, n_values, runs):
+
+        self.programs = programs
         self.n_values = n_values
         self.runs = runs
 
     def run(self):
+
+        print("\n================================================")
+        print("Benchmark started")
+        print("Programs:", ", ".join(p["file"] for p in self.programs))
+        print("Matrix sizes:", ", ".join(map(str, self.n_values)))
+        print("================================================")
+
         results = {}
-        for file in self.files:
-            source_path = Path(file).resolve()
-            if not source_path.exists():
-                print(f"[ERROR] File not found: {file}")
-                sys.exit(1)
-            print(f"\n[INFO] Benchmarking '{source_path}' ...")
-            binary = _Compiler.compile(source_path)
-            results[file] = self._benchmark_file(binary)
+
+        for program in self.programs:
+
+            file = program["file"]
+
+            print(f"\n[PROGRAM] {file}")
+
+            binary = Compiler.compile(program)
+
+            program_results = {}
+
+            for n in self.n_values:
+
+                timings = [
+
+                    Executor.run(program, binary, n)
+
+                    for _ in range(self.runs)
+
+                ]
+
+                avg = statistics.mean(timings)
+
+                program_results[n] = avg
+
+                print(f"  → Average time: {avg:.6f} s")
+
+            results[file] = program_results
+
+        print("\nBenchmark finished successfully.")
+
         return results
 
-    def _benchmark_file(self, binary):
-        file_results = {}
-        for n in self.n_values:
-            print(f"[INFO] Starting {self.runs} run(s) for n={n} ...")
-            timings = []
-            for run_idx in range(1, self.runs + 1):
-                print(f"[INFO] Run {run_idx}/{self.runs} ...")
-                t = _Executor.run(binary, n)
-                timings.append(t)
-            avg_time = statistics.mean(timings)
-            file_results[n] = avg_time
-            print(f"[OK] n={n:<6} avg_time={avg_time:.4f}s")
-        return file_results
 
+# ==========================================================
+# ======================== CSV WRITER ======================
+# ==========================================================
 
-class _CSVWriter:
-    """Handles writing benchmark results to CSV."""
+class CSVWriter:
 
     @staticmethod
     def write(filename, data, n_values):
-        print(f"[INFO] Writing results to '{filename}' ...")
-        with open(filename, "w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(["file"] + n_values)
-            for file, results in data.items():
-                row = [file] + [results[n] for n in n_values]
-                writer.writerow(row)
-        print(f"[OK] CSV file saved: '{filename}'")
 
+        print("\n[CSV OUTPUT]")
+
+        with open(filename, "w", newline="") as f:
+
+            writer = csv.writer(f)
+
+            writer.writerow(["program"] + n_values)
+
+            for file, results in data.items():
+
+                row = [file] + [results[n] for n in n_values]
+
+                writer.writerow(row)
+
+        print(f"Results written to: {filename}")
+
+
+# ==========================================================
+# =========================== MAIN =========================
+# ==========================================================
 
 def main():
-    print("[START] Benchmark process initiated...\n")
-    engine = _BenchmarkEngine(C_FILES, N_VALUES, RUNS_PER_N)
-    results = engine.run()
-    _CSVWriter.write(OUTPUT_CSV, results, N_VALUES)
-    print(f"\n[FINISH] Benchmark complete. Results saved to '{OUTPUT_CSV}'")
+
+    print("\n[START] Launching benchmark framework")
+
+    benchmark = Benchmark(
+
+        PROGRAMS,
+        N_VALUES,
+        RUNS_PER_N
+
+    )
+
+    results = benchmark.run()
+
+    CSVWriter.write(
+
+        OUTPUT_CSV,
+        results,
+        N_VALUES
+
+    )
+
+    print("\n[FINISH] Benchmark process completed successfully.\n")
 
 
 if __name__ == "__main__":
+
     main()
