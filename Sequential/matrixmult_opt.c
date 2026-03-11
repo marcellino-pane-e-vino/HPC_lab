@@ -30,16 +30,16 @@ int main(int argc,char **argv) {
     int i, j, k;
 
     
+    // Arrotondiamo la dimensione al multiplo di 64 successivo per sicurezza (richiesto da aligned_alloc)
+    if (matrix_size % alignment != 0) {
+        matrix_size = ((matrix_size / alignment) + 1) * alignment;
+    }
+    
     size_t alignment = 64;
     size_t matrix_size = sizeof(double[n][n]);
     double (*a)[n] = aligned_alloc(alignment, matrix_size);
     double (*b)[n] = aligned_alloc(alignment, matrix_size);
     double (*c)[n] = aligned_alloc(alignment, matrix_size);
-
-    // Arrotondiamo la dimensione al multiplo di 64 successivo per sicurezza (richiesto da aligned_alloc)
-    if (matrix_size % alignment != 0) {
-        matrix_size = ((matrix_size / alignment) + 1) * alignment;
-    }
     
     /*
     double (*a)[n] = malloc(sizeof(double[n][n]));
