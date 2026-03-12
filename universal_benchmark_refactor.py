@@ -17,18 +17,21 @@ from itertools import product
 OUTPUT_FOLDER = Path("benchmarks")
 
 PROGRAMS = [
-    #("matrixmult_library.c", "sequential"),
-    ("omp_matrixmult.c", "openmp"),
-    ("omp_matrixmult_tiling.c", "openmp")
+    ("matrixmult_library.c", "sequential"),
+    ("matrixmult_opt.c", "sequential"),
+    #("omp_matrixmult.c", "openmp"),
+    #("omp_matrixmult_tiling.c", "openmp")
 ]
 
 PARAMETERS = {
     "program": PROGRAMS,
-    "size": [1000,2000,3000],
-    "threads": [8, 16, 24],
+    "size": [1000,2000,3000,5000,8000,10000,15000,20000,25000],
+    "threads": [1],
     "compiler": ["icx"],
     "flagset": [
-        ["OPT_O3","CPU_NATIVE"]
+        ["OPT_O3","CPU_NATIVE"],
+        ["OPT_O3","CPU_NATIVE","LINKING"],
+        ["FAST"]
     ]
 }
 
@@ -80,27 +83,13 @@ class Program:
 class SystemDefs:
 
     FLAG_ALIASES = {
-
         "OPT_O3": {"gcc": ["-O3"], "icc": ["-O3"], "icx": ["-O3"]},
         "MATH_LIB": {"gcc": ["-lm"], "icc": ["-lm"], "icx": ["-lm"]},
+        "CPU_NATIVE": {"gcc": ["-march=native"],"icc": ["-xHost"],"icx": ["-xHost"]},
+        "FAST": {"gcc": ["-Ofast"], "icc": ["-Ofast"], "icx": ["-fast"]},
+        "LINKING": {"gcc": ["-flto"], "icc": ["-ipo"], "icx": ["-ipo"]},
 
-        "CPU_NATIVE": {
-            "gcc": ["-march=native"],
-            "icc": ["-xHost"],
-            "icx": ["-xHost"]
-        },
-
-        "FAST": {
-            "gcc": ["-Ofast"],
-            "icc": ["-Ofast"],
-            "icx": ["-fast"]
-        },
-
-        "OPENMP": {
-            "gcc": ["-fopenmp"],
-            "icc": ["-qopenmp"],
-            "icx": ["-fopenmp"]
-        }
+        "OPENMP": {"gcc": ["-fopenmp"], "icc": ["-qopenmp"],"icx": ["-fopenmp"]}
     }
 
     PROGRAM_TYPES = {
