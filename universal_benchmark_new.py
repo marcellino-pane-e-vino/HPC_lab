@@ -19,7 +19,7 @@ OUTPUT_FOLDER = Path("benchmarks")
 # Concept: Allow 'None' in threads so sequential programs only get 1 argument (size)
 PARAMETERS = {
     "program": [
-        # ("matrixmult_library.c", "sequential"),
+        ("matrixmult_library.c", "sequential"),
         ("matrixmult_opt.c", "sequential"),
         # ("omp_matrixmult.c", "openmp"),
     ],
@@ -27,8 +27,8 @@ PARAMETERS = {
     "threads": [None],  # Use None for sequential, use integers [1, 2, 4] for OpenMP
     "compiler": ["icx"],
     "flagset": [
-        ["FAST"], 
-        # ["OPT_O3", "CPU_NATIVE"]
+        #["FAST"], 
+        ["OPT_O3", "CPU_NATIVE"]
     ]
 }
 
@@ -126,10 +126,40 @@ class Compiler:
         binary = self.out_dir / f"{path.stem}_{compiler_name}_{flag_hash}"
 
         cache_key = (str(path), compiler_name, tuple(flags))
-        if cache_key in self.cache or binary.exists():
-            Logger.info(f"CACHE HIT: {binary.name}")
+        
+        # FIX 1: Check memory cache FIRST. This preserves special paths.
+        if cache_key in self.cache:
+            cached_bin = self.cache[cache_key]
+            Logger.info(f"CACHE HIT (Memory): {cached_bin.name}")
+            return cached_bin
+            
+        # FIX 2: Check disk separately for standard binaries
+        if binary.exists():
+            Logger.info(f"CACHE HIT (Disk): {binary.name}")
             self.cache[cache_key] = binary
             return binary
+
+        with StepTimer(f"Compiling {path.name} with {compiler_name} [{flag_hash}]"):
+            # Special case for the library build script
+            if path.name == "matrixmult_library.c":
+                build_script = path.parent / "build_matrixmult.sh"
+                if not os.access(build_script, os.X_OK): os.chmod(build_script, 0o755)
+                subprocess.run([str(build_script)], check=True)
+                special_bin = path.parent / "matrixmult"
+                
+                # Save the special path to memory cache
+                self.cache[cache_key] = special_bin 
+                return special_bin
+
+            # Standard compilation (Intel env is already loaded globally)
+            cmd = [compiler_name] + flags + [str(path), "-o", str(binary)]
+            res = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if res.returncode != 0:
+                Logger.error(f"Compile failed:\n{res.stderr}")
+
+        self.cache[cache_key] = binary
+        return binary
 
         with StepTimer(f"Compiling {path.name} with {compiler_name} [{flag_hash}]"):
             # Special case for the library build script
