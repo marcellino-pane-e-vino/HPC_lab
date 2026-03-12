@@ -3,6 +3,7 @@
 import subprocess
 import csv
 import sys
+import time
 import os
 import hashlib
 from pathlib import Path
@@ -24,7 +25,7 @@ PROGRAMS = [
 PARAMETERS = {
     "program": PROGRAMS,
     "size": [1000,2000,3000],
-    "threads": [24],
+    "threads": [8, 16, 24],
     "compiler": ["icx"],
     "flagset": [
         ["OPT_O3","CPU_NATIVE"]
@@ -235,6 +236,32 @@ class ParameterSweep:
             yield dict(zip(self.keys, combo))
 
 
+
+
+def print_experiment_recap(parameters):
+    Logger.info("Experiment Recap:")
+    for k, v in parameters.items():
+        if k == "program":
+            v = [p[0] if isinstance(p, tuple) else p.name for p in v]
+        Logger.info(f"  {k}: {v}")
+    Logger.info(f"Total combinations: {len(list(ParameterSweep(parameters)))}")
+
+def print_progress_bar(iteration, total, prefix='', length=40):
+    """
+    Print a progress bar in the terminal.
+
+    iteration : int : current iteration
+    total     : int : total iterations
+    prefix    : str : optional prefix string
+    length    : int : character length of the bar
+    """
+    percent = iteration / total
+    filled_length = int(length * percent)
+    bar = '█' * filled_length + '-' * (length - filled_length)
+    sys.stdout.write(f'\r{prefix} |{bar}| {iteration}/{total}')
+    sys.stdout.flush()
+    if iteration == total:
+        print()
 # ==========================================================
 # ============================ MAIN ========================
 # ==========================================================
@@ -246,36 +273,44 @@ def main():
     parameters = PARAMETERS.copy()
 
     if "program" in parameters:
-        parameters["program"] = [Program(p[0],p[1]) for p in parameters["program"]]
-
-    sweep = ParameterSweep(parameters)
+        parameters["program"] = [Program(p[0], p[1]) for p in parameters["program"]]
+    
+    print_experiment_recap(parameters)
+    sweep = list(ParameterSweep(parameters))  # convert to list to know total
+    total_runs = len(sweep)
 
     rows = []
 
-    for p in sweep:
+    for i, p in enumerate(sweep, 1):  # start counting from 1
+        # --- your existing code ---
         program = p.get("program")
-        compiler = p.get("compiler","gcc")
-        flagset = p.get("flagset",[])
+        compiler = p.get("compiler", "gcc")
+        flagset = p.get("flagset", [])
         size = p.get("size")
         threads = p.get("threads")
 
-        flags = FlagManager.build_flags(program,compiler,flagset)
-        binary = Compiler.compile(program,compiler,flags,OUTPUT_FOLDER)
-        runtime = Executor.run(binary,size,threads)
+        flags = FlagManager.build_flags(program, compiler, flagset)
+        binary = Compiler.compile(program, compiler, flags, OUTPUT_FOLDER)
+        runtime = Executor.run(binary, size, threads)
         row = [
             (p.get(k).file if isinstance(p.get(k), Program) else p.get(k))
             for k in parameters.keys()
         ] + [runtime]
         rows.append(row)
 
+        # --- update progress bar ---
+        print_progress_bar(i, total_runs, prefix='Running experiments')
+
+    # --- rest of your code ---
     headers = list(parameters.keys()) + ["runtime"]
-    name = "results|" + "|".join(f"{k}={len(v)}" for k,v in PARAMETERS.items())
+    name = "results|" + "|".join(f"{k}={len(v)}" for k, v in PARAMETERS.items())
     csv_file = OUTPUT_FOLDER / f"{name}.csv"
 
-    with open(csv_file,"w",newline="") as f:
+    with open(csv_file, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(headers)
         writer.writerows(rows)
+
     Logger.success(f"Benchmark complete → {csv_file}")
 
 
