@@ -183,5 +183,24 @@ GCC: Tende a essere più conservativo. Se scrivi fmin, lui genera una chiamata a
 
 ICX: Essendo un compilatore Intel, riconosce che fmin applicato a variabili che derivano da indici di loop interi è ridondante. ICX esegue quella che si chiama Idiom Recognition: capisce che la tua "intenzione" è un MIN(a, b) tra interi e sostituisce silenziosamente la pesante fmin con un'istruzione assembly cmov (conditional move) o minpd molto più leggera.
 
-UNA MERDA
+
+GCC - NO FLAG - NO MACRO
+2000 - Total Execution Time: 15.3034 seconds
+3000 - Total Execution Time: 51.2488 seconds
+
+GCC - NO FLAG - MACRO
+2000 - Total Execution Time: 13.4816 seconds
+3000 - Total Execution Time: 45.4260 seconds
+
+
+GCC - FLAG - NO MACRO
+5000 - Total Execution Time: 7.3781 seconds
+8000 - Total Execution Time: 30.8125 seconds
+
+GCC - FLAG - MACRO
+5000 - Total Execution Time: 7.2956 seconds
+8000 - Total Execution Time: 30.2090 seconds
+
+To be not redundant, the same results were obtained through ICX, even without any flag, since ICX is able to apply optmization alone (smart compiler)
+
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
