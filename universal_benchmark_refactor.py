@@ -25,7 +25,7 @@ PROGRAMS = [
 
 PARAMETERS = {
     "program": PROGRAMS,
-    "size": [1000,2000,3000,5000,8000,10000,15000,20000,25000],
+    "size": [1000,2000,3000,5000,8000,10000,15000],
     "threads": [1],
     "compiler": ["icx"],
     "flagset": [
@@ -142,7 +142,12 @@ class Compiler:
 
         source = program.path
 
-        binary = output_folder / f"{source.stem}_{compiler}"
+        flag_hash = Compiler.flags_hash(flags)
+        binary = output_folder / f"{source.stem}_{compiler}_{flag_hash}"
+
+        if binary.exists():
+            Compiler.cache[key] = binary
+            return binary
 
         Logger.info(f"Compiling {source.name} with {compiler}")
 
@@ -163,13 +168,13 @@ class Compiler:
             Compiler.cache[key] = binary
             return binary
 
-        cmd = [compiler, str(source), "-o", str(binary)] + flags
+        cmd = [compiler] + flags + [str(source), "-o", str(binary)]
 
         if compiler in ["icc","icx"]:
 
             subprocess.run(
                 ["bash","-c",
-                 f"source /opt/intel/oneapi/setvars.sh >/dev/null 2>&1 && {' '.join(cmd)}"],
+                f"source /opt/intel/oneapi/setvars.sh >/dev/null 2>&1 && {' '.join(cmd)}"],
                 check=True
             )
 
@@ -179,6 +184,11 @@ class Compiler:
         Compiler.cache[key] = binary
 
         return binary
+
+    @staticmethod
+    def flags_hash(flags):
+        s = " ".join(flags)
+        return hashlib.md5(s.encode()).hexdigest()[:8]
 
 
 # ==========================================================
@@ -198,7 +208,10 @@ class Executor:
         if threads:
             cmd.append(str(threads))
 
-        result = subprocess.run(cmd,capture_output=True,text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True)
+
+        if result.returncode != 0:
+            Logger.error(f"Program failed:\n{result.stderr}")
 
         for line in result.stdout.splitlines():
 
@@ -251,57 +264,114 @@ def print_progress_bar(iteration, total, prefix='', length=40):
     sys.stdout.flush()
     if iteration == total:
         print()
+
+def get_csv_path(parameters):
+    headers = list(parameters.keys()) + ["runtime"]
+    name = "results|" + "|".join(f"{k}={len(v)}" for k, v in PARAMETERS.items())
+    csv_file = OUTPUT_FOLDER / f"{name}.csv"
+    return csv_file, headers
+
+
+def load_completed(csv_file):
+    completed = set()
+
+    if not csv_file.exists():
+        return completed
+
+    with open(csv_file) as f:
+        reader = csv.reader(f)
+        next(reader, None)
+        for row in reader:
+            completed.add(tuple(row[:-1]))
+
+    return completed
+
+
+def open_csv_writer(csv_file, headers):
+    write_header = not csv_file.exists()
+
+    f = open(csv_file, "a", newline="")
+    writer = csv.writer(f)
+
+    if write_header:
+        writer.writerow(headers)
+
+    return f, writer
+
+
+def build_key(p, parameters):
+    return tuple(
+        tuple(p.get(k)) if isinstance(p.get(k), list) else (p.get(k).file if isinstance(p.get(k), Program) else p.get(k))
+        for k in parameters.keys()
+    )
+
+
+def run_experiment(p, parameters):
+    program = p.get("program")
+    compiler = p.get("compiler", "gcc")
+    flagset = p.get("flagset", [])
+    size = p.get("size")
+    threads = p.get("threads")
+
+    flags = FlagManager.build_flags(program, compiler, flagset)
+    binary = Compiler.compile(program, compiler, flags, OUTPUT_FOLDER)
+
+    runtime = Executor.run(binary, size, threads)
+
+    key = build_key(p, parameters)
+
+    return key, runtime
+
 # ==========================================================
 # ============================ MAIN ========================
 # ==========================================================
 
 def main():
-
+    # Ensure output folder exists
     OUTPUT_FOLDER.mkdir(exist_ok=True)
 
+    # Prepare parameters: convert programs to Program objects
     parameters = PARAMETERS.copy()
-
     if "program" in parameters:
         parameters["program"] = [Program(p[0], p[1]) for p in parameters["program"]]
-    
+
+    # Print experiment recap
     print_experiment_recap(parameters)
-    sweep = list(ParameterSweep(parameters))  # convert to list to know total
+
+    # Generate all combinations
+    sweep = list(ParameterSweep(parameters))
     total_runs = len(sweep)
 
-    rows = []
+    # CSV file path and headers
+    csv_file, headers = get_csv_path(parameters)
 
-    for i, p in enumerate(sweep, 1):  # start counting from 1
-        # --- your existing code ---
-        program = p.get("program")
-        compiler = p.get("compiler", "gcc")
-        flagset = p.get("flagset", [])
-        size = p.get("size")
-        threads = p.get("threads")
+    # Load already completed runs to skip them
+    completed = load_completed(csv_file)
 
-        flags = FlagManager.build_flags(program, compiler, flagset)
-        binary = Compiler.compile(program, compiler, flags, OUTPUT_FOLDER)
-        runtime = Executor.run(binary, size, threads)
-        row = [
-            (p.get(k).file if isinstance(p.get(k), Program) else p.get(k))
-            for k in parameters.keys()
-        ] + [runtime]
-        rows.append(row)
+    # Run experiments
+    for i, p in enumerate(sweep, 1):
+        key = build_key(p, parameters)
 
-        # --- update progress bar ---
+        # Skip if already completed
+        if key in completed:
+            print_progress_bar(i, total_runs, prefix='Running experiments')
+            continue
+
+        # Run experiment
+        key, runtime = run_experiment(p, parameters)
+
+        # Write result immediately to CSV
+        with open(csv_file, "a", newline="") as f:
+            writer = csv.writer(f)
+            # Write header if file is empty
+            if f.tell() == 0:
+                writer.writerow(headers)
+            writer.writerow(list(key) + [runtime])
+
+        # Update progress bar
         print_progress_bar(i, total_runs, prefix='Running experiments')
 
-    # --- rest of your code ---
-    headers = list(parameters.keys()) + ["runtime"]
-    name = "results|" + "|".join(f"{k}={len(v)}" for k, v in PARAMETERS.items())
-    csv_file = OUTPUT_FOLDER / f"{name}.csv"
-
-    with open(csv_file, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(headers)
-        writer.writerows(rows)
-
     Logger.success(f"Benchmark complete → {csv_file}")
-
 
 if __name__ == "__main__":
     main()
