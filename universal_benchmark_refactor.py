@@ -24,10 +24,10 @@ PROGRAMS = [
 PARAMETERS = {
     "program": PROGRAMS,
     "size": [1000,2000,3000],
-    "threads": [1,2,4,8,12,16,24],
-    "compiler": ["gcc","icx"],
+    "threads": [24],
+    "compiler": ["icx"],
     "flagset": [
-        ["OPT_O3","MATH_LIB","CPU_NATIVE","FAST"]
+        ["OPT_O3","CPU_NATIVE"]
     ]
 }
 
