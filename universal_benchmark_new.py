@@ -23,11 +23,11 @@ PARAMETERS = {
         ("matrixmult_opt.c", "sequential"),
         # ("omp_matrixmult.c", "openmp"),
     ],
-    "size": [1000, 2000, 3000],
+    "size": [1000, 2000, 3000, 5000, 8000],
     "threads": [None],  # Use None for sequential, use integers [1, 2, 4] for OpenMP
     "compiler": ["icx"],
     "flagset": [
-        #["FAST"], 
+        ["FAST"], 
         ["OPT_O3", "CPU_NATIVE"]
     ]
 }
