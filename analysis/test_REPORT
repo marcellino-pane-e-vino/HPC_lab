@@ -183,4 +183,5 @@ GCC: Tende a essere più conservativo. Se scrivi fmin, lui genera una chiamata a
 
 ICX: Essendo un compilatore Intel, riconosce che fmin applicato a variabili che derivano da indici di loop interi è ridondante. ICX esegue quella che si chiama Idiom Recognition: capisce che la tua "intenzione" è un MIN(a, b) tra interi e sostituisce silenziosamente la pesante fmin con un'istruzione assembly cmov (conditional move) o minpd molto più leggera.
 
+UNA MERDA
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
