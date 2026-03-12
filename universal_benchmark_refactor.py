@@ -16,8 +16,9 @@ from itertools import product
 OUTPUT_FOLDER = Path("benchmarks")
 
 PROGRAMS = [
-    ("matrixmult_library.c", "sequential"),
-    ("omp_matrixmult.c", "openmp")
+    #("matrixmult_library.c", "sequential"),
+    ("omp_matrixmult.c", "openmp"),
+    ("omp_matrixmult_tiling.c", "openmp")
 ]
 
 PARAMETERS = {
