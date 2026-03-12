@@ -148,6 +148,7 @@ Size: n=15000 - Total Execution Time: 235.0233 seconds
 - OpenMP / MPI
 Nota importante da fare sull'architettura: Note the hybrid core architecture, which presents specific load-balancing challenges for shared-memory parallelization.
 
+Full Tuning: icx -O3 -xHost -qopenmp -ffast-math -mprefer-vector-width=256 -fsimd-cost-model=unlimited
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 Nota riguardante l'identificazione dell'hotspot.
