@@ -1,0 +1,25 @@
+program,size,threads,compiler,flagset,mean_runtime
+"('omp_matrixmult_tiling_static.c', 'openmp')",8000,24,icx,"['OPT_O3', 'CPU_NATIVE']",5.416931
+"('omp_matrixmult_tiling_guided.c', 'openmp')",8000,24,icx,"['OPT_O3', 'CPU_NATIVE']",5.79135766666667
+"('omp_matrixmult_tiling_dynamic.c', 'openmp')",8000,24,icx,"['OPT_O3', 'CPU_NATIVE']",5.824303
+"('omp_matrixmult_tiling_dynamic_16.c', 'openmp')",8000,24,icx,"['OPT_O3', 'CPU_NATIVE']",5.86081033333333
+"('omp_matrixmult_tiling_dynamic_64.c', 'openmp')",8000,24,icx,"['OPT_O3', 'CPU_NATIVE']",5.89506266666667
+"('omp_matrixmult_tiling_dynamic_256.c', 'openmp')",8000,24,icx,"['OPT_O3', 'CPU_NATIVE']",6.14770933333333
+"('omp_matrixmult_tiling_static.c', 'openmp')",10000,24,icx,"['OPT_O3', 'CPU_NATIVE']",10.5687786666667
+"('omp_matrixmult_tiling_guided.c', 'openmp')",10000,24,icx,"['OPT_O3', 'CPU_NATIVE']",11.308735
+"('omp_matrixmult_tiling_dynamic.c', 'openmp')",10000,24,icx,"['OPT_O3', 'CPU_NATIVE']",11.3537786666667
+"('omp_matrixmult_tiling_dynamic_16.c', 'openmp')",10000,24,icx,"['OPT_O3', 'CPU_NATIVE']",11.44885
+"('omp_matrixmult_tiling_dynamic_64.c', 'openmp')",10000,24,icx,"['OPT_O3', 'CPU_NATIVE']",11.5002033333333
+"('omp_matrixmult_tiling_dynamic_256.c', 'openmp')",10000,24,icx,"['OPT_O3', 'CPU_NATIVE']",11.840248
+"('omp_matrixmult_tiling_guided.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",38.46562
+"('omp_matrixmult_tiling_dynamic_16.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",38.6142536666667
+"('omp_matrixmult_tiling_dynamic.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",38.728712
+"('omp_matrixmult_tiling_dynamic_64.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",38.8883163333333
+"('omp_matrixmult_tiling_dynamic_256.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",39.2953656666667
+"('omp_matrixmult_tiling_static.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",39.5134623333333
+"('omp_matrixmult_tiling_guided.c', 'openmp')",20000,24,icx,"['OPT_O3', 'CPU_NATIVE']",90.1803856666667
+"('omp_matrixmult_tiling_dynamic_16.c', 'openmp')",20000,24,icx,"['OPT_O3', 'CPU_NATIVE']",90.446866
+"('omp_matrixmult_tiling_dynamic_64.c', 'openmp')",20000,24,icx,"['OPT_O3', 'CPU_NATIVE']",90.727664
+"('omp_matrixmult_tiling_dynamic.c', 'openmp')",20000,24,icx,"['OPT_O3', 'CPU_NATIVE']",90.774828
+"('omp_matrixmult_tiling_dynamic_256.c', 'openmp')",20000,24,icx,"['OPT_O3', 'CPU_NATIVE']",91.2528076666667
+"('omp_matrixmult_tiling_static.c', 'openmp')",20000,24,icx,"['OPT_O3', 'CPU_NATIVE']",91.698057
