@@ -65,7 +65,7 @@ find /opt/intel -name "advixe-vars.sh" 2>/dev/null dovrebbe dare come output:
 3- advixe-cl --collect survey --project-dir ./progetto_advisor -- ./matrixmult_opt
 
 
-4- advixe-cl --collect tripcounts -flops --project-dir ./progetto_advisor -- ./matrixmult_opt
+4- advixe-cl --collect tripcounts --project-dir ./progetto_advisor -- ./matrixmult_opt
 
 
 5- advixe-cl --collect roofline --project-dir ./progetto_advisor -- ./matrixmult_opt
