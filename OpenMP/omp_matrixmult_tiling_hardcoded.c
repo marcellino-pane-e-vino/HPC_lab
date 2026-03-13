@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
 
     printf("Inizializzazione matrici N=%d con %d threads...\n", N, NUM_THREADS);
 
-    // Allocazione allineata a 64 byte per favorire AVX2/AVX-512 [cite: 15, 31]
+    // Allocazione allineata a 64 byte per favorire AVX2/AVX-512
     // Usiamo restrict per dire al compilatore: "tranquillo, non ci sono sovrapposizioni in memoria"
     double * restrict a = (double *)aligned_alloc(64, N * N * sizeof(double));
     double * restrict b = (double *)aligned_alloc(64, N * N * sizeof(double));
