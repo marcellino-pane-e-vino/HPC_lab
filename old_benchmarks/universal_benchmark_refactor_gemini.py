@@ -1,0 +1,510 @@
+#!/usr/bin/env python3
+"""
+============================================================
+Universal C Benchmark Framework
+============================================================
+
+A highly modular, extensible framework for running C/C++ 
+benchmarks across multiple threads, sizes, compilers, and flags.
+
+Architecture separates configuration, validation, compilation, 
+execution, and output generation into distinct, manageable classes.
+============================================================
+"""
+
+import subprocess
+import statistics
+import csv
+import sys
+import os
+import hashlib
+from pathlib import Path
+
+# ==========================================================
+# ====================== TERMINAL UTILS ====================
+# ==========================================================
+
+class Logger:
+    @staticmethod
+    def info(msg):
+        print(f"[INFO] {msg}")
+
+    @staticmethod
+    def success(msg):
+        print(f"[OK]   {msg}")
+
+    @staticmethod
+    def warn(msg):
+        print(f"[WARN] {msg}")
+
+    @staticmethod
+    def error(msg):
+        print(f"[ERROR] {msg}")
+        sys.exit(1)
+
+# ==========================================================
+# ================= EXPERIMENT CONFIGURATION ===============
+# ==========================================================
+
+class Config:
+    """
+    Centralized configuration. Keeps experiment arguments and 
+    concepts explicitly defined and permanently documented.
+    """
+    
+    # ------------------------------------------------------
+    # Global Settings
+    # ------------------------------------------------------
+    MODE = "program_vs_size" # "threads_vs_size", "program_vs_size", "compiler_vs_flags"
+    RUNS_PER_TEST = 1
+    OUTPUT_FOLDER = Path(__file__).parent / "benchmarks"
+
+    # ------------------------------------------------------
+    # Mode: threads_vs_size
+    # ------------------------------------------------------
+    TVS_PROGRAM = {"file": "omp_matrixmult_tiling.c", "type": "openmp"}
+    TVS_MATRIX_SIZES = [1000, 2000, 3000]
+    TVS_THREAD_VALUES = [8, 16, 24]
+    TVS_COMPILER = "icx"
+    TVS_FLAGSET = ["OPT_O3", "MATH_LIB", "CPU_NATIVE", "FAST"]
+
+    # ------------------------------------------------------
+    # Mode: program_vs_size
+    # ------------------------------------------------------
+    PVS_PROGRAMS = [
+        {"file": "matrixmult_library.c", "type": "sequential"},
+        {"file": "omp_matrixmult.c", "type": "openmp"}
+    ]
+    PVS_MATRIX_SIZES = [1000, 2000, 3000]
+    PVS_THREADS = 24
+    PVS_COMPILER = "icx"
+    PVS_FLAGSET = ["OPT_O3", "MATH_LIB", "CPU_NATIVE", "FAST"]
+
+    # ------------------------------------------------------
+    # Mode: compiler_vs_flags
+    # ------------------------------------------------------
+    CVF_PROGRAM = {"file": "omp_matrixmult.c", "type": "openmp"}
+    CVF_MATRIX_SIZE = 2500
+    CVF_THREADS = 24
+    CVF_COMPILERS = ["gcc", "icc", "icx"]
+    CVF_FLAGSETS = [
+        [],
+        ["OPT_O3", "MATH_LIB", "CPU_NATIVE", "FAST", "MEMORY_ALIGNMENT", "INLINE", "LINKING"]
+    ]
+
+# ==========================================================
+# ================= PROGRAM & FLAG SYSTEMS =================
+# ==========================================================
+
+class SystemDefs:
+    FLAG_ALIASES = {
+        "OPT_O3": {"gcc": ["-O3"], "icc": ["-O3"], "icx": ["-O3"]},
+        "MATH_LIB": {"gcc": ["-lm"], "icc": ["-lm"], "icx": ["-lm"]},
+        "CPU_NATIVE": {"gcc": ["-march=native"], "icc": ["-xHost"], "icx": ["-xHost"]},
+        "FAST": {"gcc": ["-Ofast"], "icc": ["-Ofast"], "icx": ["-fast"]},
+        "MEMORY_ALIGNMENT": {"gcc": ["-DALIGNED"], "icc": ["-DALIGNED"], "icx": ["-DALIGNED"]},
+        "INLINE": {"gcc": ["-DNOFUNCCALL"], "icc": ["-DNOFUNCCALL"], "icx": ["-DNOFUNCCALL"]},
+        "LINKING": {"gcc": ["-flto"], "icc": ["-ipo"], "icx": ["-ipo"]},
+        "OPENMP": {"gcc": ["-fopenmp"], "icc": ["-qopenmp"], "icx": ["-fopenmp"]}
+    }
+
+    PROGRAM_TYPES = {
+        "sequential": {
+            "compiler": "icx", # Default fallback
+            "compile_prefix": [],
+            "compile_suffix": [],
+            "run_mode": "normal"
+        },
+        "openmp": {
+            "compiler": "icx",
+            "compile_prefix": ["OPENMP"],
+            "compile_suffix": [],
+            "run_mode": "openmp"
+        },
+        "mpi": {
+            "compiler": "mpicc",
+            "compile_prefix": [],
+            "compile_suffix": [],
+            "run_mode": "mpi"
+        }
+    }
+
+class FlagManager:
+    @staticmethod
+    def expand_flags(compiler, aliases):
+        flags = []
+        for alias in aliases:
+            compiler_flags = SystemDefs.FLAG_ALIASES.get(alias, {}).get(compiler)
+            if compiler_flags is None:
+                Logger.warn(f"No flags found for alias '{alias}' and compiler '{compiler}'")
+            else:
+                flags.extend(compiler_flags)
+        return flags
+
+    @staticmethod
+    def build_flags(program, compiler, user_configs=None):
+        ptype = program["type"]
+        type_info = SystemDefs.PROGRAM_TYPES[ptype]
+
+        aliases = []
+        aliases += type_info.get("compile_prefix", [])
+        if user_configs:
+            aliases += user_configs
+        aliases += program.get("flags", [])
+        aliases += type_info.get("compile_suffix", [])
+
+        return FlagManager.expand_flags(compiler, aliases)
+
+# ==========================================================
+# ========================= COMPILER =======================
+# ==========================================================
+
+class Compiler:
+    cache = {}
+
+    @staticmethod
+    def compile(program, compiler, flags):
+        key = (program["file"], compiler, tuple(flags))
+        if key in Compiler.cache:
+            return Compiler.cache[key]
+
+        source = Path(program["file"]).resolve()
+        safe_flags = "_".join(f.replace("-", "") for f in flags)
+        binary = Config.OUTPUT_FOLDER / f"{source.stem}_{compiler}_{safe_flags}"
+
+        Logger.info(f"Compiling {source.name} with {compiler}")
+        Logger.info(f"Flags: {' '.join(flags)}")
+
+        # Check if the program is matrixmult_library.c and handle OpenBLAS
+        if source.name == "matrixmult_library.c":
+            build_script = source.parent / "build_matrixmult.sh"
+            if not build_script.exists():
+                Logger.error(f"Build script not found: {build_script}")
+
+            # Ensure the build script is executable
+            if not os.access(build_script, os.X_OK):
+                Logger.info(f"Build script not executable. Fixing permissions...")
+                try:
+                    os.chmod(build_script, 0o755)
+                except Exception as e:
+                    Logger.error(f"Failed to set execute permission: {e}")
+
+            Logger.info(f"Running build script for {source} ...")
+            try:
+                subprocess.run([str(build_script)], check=True)
+            except subprocess.CalledProcessError:
+                Logger.error(f"Build script failed for {source}")
+            
+            binary = source.parent / "matrixmult"
+            if not binary.exists():
+                Logger.error(f"Expected executable not found: {binary}")
+
+            Logger.success(f"Build script completed: {binary}")
+            Compiler.cache[key] = binary
+            return binary
+
+        # Normal compilation
+        normal_flags = [f for f in flags if f != "-lm"]
+        lm_flags = ["-lm"] if "-lm" in flags else []
+
+        cmd = [compiler, str(source), "-o", str(binary)] + normal_flags + lm_flags
+
+        try:
+            if compiler in ["icc", "icx"]:
+                compile_command = " ".join(cmd)
+                subprocess.run(
+                    ["bash", "-c", f"source /opt/intel/oneapi/setvars.sh > /dev/null 2>&1 && {compile_command}"],
+                    check=True
+                )
+            else:
+                subprocess.run(cmd, check=True)
+        except subprocess.CalledProcessError as e:
+            Logger.error(f"Compilation failed for {source.name}. Command: {' '.join(cmd)}")
+
+        Compiler.cache[key] = binary
+        Logger.success(f"Compilation finished: {binary}")
+        return binary
+
+# ==========================================================
+# ========================= EXECUTOR =======================
+# ==========================================================
+
+class Executor:
+    @staticmethod
+    def run(binary, n, threads=None):
+        cmd = [str(binary), str(n)]
+        if threads:
+            cmd.append(str(threads))
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        except subprocess.CalledProcessError as e:
+            Logger.error(f"Execution failed: {binary}\n{e.stderr}")
+
+        for line in result.stdout.splitlines():
+            if "Execution Time" in line or "Tempo di esecuzione" in line:
+                try:
+                    return float(line.split()[-2])
+                except ValueError:
+                    Logger.error(f"Could not parse execution time from output: {line}")
+
+        Logger.error("Execution time not found in program output")
+
+# ==========================================================
+# ==================== FILENAME GENERATOR ==================
+# ==========================================================
+
+class FilenameGenerator:
+    @staticmethod
+    def generate_experiment_name(mode, args=None):
+        """
+        Generate a descriptive filename based on experiment mode and arguments.
+        """
+        experiment_name = "results"
+
+        if mode == "threads_vs_size":
+            experiment_name += f"|threads_vs_size"
+            experiment_name += f"|programs={Config.TVS_PROGRAM['file']}"
+            experiment_name += f"|threads={'|'.join(map(str, Config.TVS_THREAD_VALUES))}"
+            experiment_name += f"|matrix_sizes={'|'.join(map(str, Config.TVS_MATRIX_SIZES))}"
+
+        elif mode == "program_vs_size":
+            experiment_name += f"|program_vs_size"
+            experiment_name += f"|programs={'|'.join([p['file'] for p in Config.PVS_PROGRAMS])}"
+            experiment_name += f"|matrix_sizes={'|'.join(map(str, Config.PVS_MATRIX_SIZES))}"
+
+        elif mode == "compiler_vs_flags":
+            experiment_name += f"|compiler_vs_flags"
+            experiment_name += f"|programs={Config.CVF_PROGRAM['file']}"
+            experiment_name += f"|configs={'|'.join(['_'.join(config) for config in Config.CVF_FLAGSETS])}"
+            experiment_name += f"|compilers={'|'.join(Config.CVF_COMPILERS)}"
+
+        else:
+            Logger.error(f"Unsupported mode: {mode}")
+            return ""
+
+        if len(experiment_name) > 255:
+            name_hash = hashlib.md5(experiment_name.encode('utf-8')).hexdigest()[:8]
+            experiment_name = experiment_name[:240] + f"+{name_hash}"
+
+        return experiment_name
+
+    @staticmethod
+    def generate_csv_filename(mode, headers):
+        experiment_name = FilenameGenerator.generate_experiment_name(mode, headers)
+        return Config.OUTPUT_FOLDER / f"{experiment_name}.csv"
+
+    @staticmethod
+    def generate_tex_filename(mode, headers):
+        experiment_name = FilenameGenerator.generate_experiment_name(mode, headers)
+        tex_folder = Config.OUTPUT_FOLDER / "latex_results"
+        tex_folder.mkdir(parents=True, exist_ok=True)
+        return tex_folder / f"{experiment_name}.tex"
+
+# ==========================================================
+# ===================== OUTPUT WRITERS =====================
+# ==========================================================
+
+class OutputManager:
+    @staticmethod
+    def write_csv(filename, headers, rows):
+        Logger.info(f"Writing CSV results → {filename}")
+        with open(filename, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(headers)
+            for r in rows:
+                writer.writerow(r)
+        Logger.success(f"CSV export complete")
+
+    @staticmethod
+    def write_latex(filename, headers, rows):
+        Logger.info(f"Writing LaTeX table → {filename}")
+        with open(filename, "w") as f:
+            cols = "c|" + "c" * (len(headers)-1)
+            f.write(f"\\begin{{tabular}}{{{cols}}}\n")
+            f.write(" & ".join(str(header) for header in headers) + " \\\\\n")
+            f.write("\\hline\n")
+            for r in rows:
+                formatted = [f"{x:.3f}" if isinstance(x, float) else str(x) for x in r]
+                f.write(" & ".join(formatted) + " \\\\\n")
+            f.write("\\end{tabular}\n")
+        Logger.success(f"LaTeX export complete")
+
+# ==========================================================
+# ===================== VALIDATION =========================
+# ==========================================================
+
+class Validator:
+    @staticmethod
+    def _compiler_available(compiler):
+        try:
+            if compiler in ["icc", "icx"]:
+                cmd = f"source /opt/intel/oneapi/setvars.sh >/dev/null 2>&1 && {compiler} --version"
+                result = subprocess.run(["bash", "-c", cmd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            else:
+                result = subprocess.run([compiler, "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return result.returncode == 0
+        except Exception:
+            return False
+
+    @staticmethod
+    def validate():
+        Logger.info("Validating configuration...")
+        Config.OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
+
+        valid_modes = ["threads_vs_size", "program_vs_size", "compiler_vs_flags"]
+        if Config.MODE not in valid_modes:
+            Logger.error(f"Invalid MODE '{Config.MODE}'. Choose from: {valid_modes}")
+
+        # Basic path and param checks based on mode
+        if Config.MODE == "threads_vs_size":
+            if not Path(Config.TVS_PROGRAM["file"]).exists():
+                Logger.error(f"Source file not found: {Config.TVS_PROGRAM['file']}")
+            if Config.TVS_PROGRAM["type"] == "sequential":
+                Logger.error("In 'threads_vs_size' mode, program type cannot be 'sequential'.")
+            if not all(t > 0 for t in Config.TVS_THREAD_VALUES) or not all(m > 0 for m in Config.TVS_MATRIX_SIZES):
+                Logger.error("Threads and Matrix sizes must be positive integers.")
+
+        elif Config.MODE == "program_vs_size":
+            for prog in Config.PVS_PROGRAMS:
+                if not Path(prog["file"]).exists():
+                    Logger.error(f"Source file not found: {prog['file']}")
+            if not all(m > 0 for m in Config.PVS_MATRIX_SIZES):
+                Logger.error("Matrix sizes must be positive integers.")
+
+        elif Config.MODE == "compiler_vs_flags":
+            available = [c for c in Config.CVF_COMPILERS if Validator._compiler_available(c)]
+            if not available:
+                Logger.error("No working compilers found.")
+            for c in available:
+                Logger.info(f"Compiler '{c}' detected")
+
+            for flags in Config.CVF_FLAGSETS:
+                for flag in flags:
+                    if flag not in SystemDefs.FLAG_ALIASES:
+                        Logger.error(f"Invalid flag alias: {flag}")
+
+        Logger.success("Configuration validated")
+
+# ==========================================================
+# ====================== BENCHMARKS ========================
+# ==========================================================
+
+class Benchmarks:
+    @staticmethod
+    def threads_vs_size():
+        program = Config.TVS_PROGRAM
+        compiler = Config.TVS_COMPILER
+        flags = FlagManager.build_flags(program, compiler, Config.TVS_FLAGSET)
+        binary = Compiler.compile(program, compiler, flags)
+
+        headers = ["threads"] + Config.TVS_MATRIX_SIZES
+        rows = []
+
+        for t in Config.TVS_THREAD_VALUES:
+            row = [t]
+            for n in Config.TVS_MATRIX_SIZES:
+                times = [Executor.run(binary, n, t) for _ in range(Config.RUNS_PER_TEST)]
+                row.append(statistics.mean(times))
+            rows.append(row)
+        return headers, rows
+
+    @staticmethod
+    def program_vs_size():
+        headers = ["program"] + Config.PVS_MATRIX_SIZES
+        rows = []
+
+        for program in Config.PVS_PROGRAMS:
+            compiler = Config.PVS_COMPILER
+            flags = FlagManager.build_flags(program, compiler, Config.PVS_FLAGSET)
+            binary = Compiler.compile(program, compiler, flags)
+
+            row = [program["file"]]
+            for n in Config.PVS_MATRIX_SIZES:
+                times = [Executor.run(binary, n, Config.PVS_THREADS) for _ in range(Config.RUNS_PER_TEST)]
+                row.append(statistics.mean(times))
+            rows.append(row)
+        return headers, rows
+
+    @staticmethod
+    def compiler_vs_flags():
+        program = Config.CVF_PROGRAM
+        headers = ["config"] + Config.CVF_COMPILERS
+        rows = []
+
+        for config in Config.CVF_FLAGSETS:
+            row = ["_".join(config) if config else "NO_FLAGS"]
+            for compiler in Config.CVF_COMPILERS:
+                flags = FlagManager.build_flags(program, compiler, config)
+                binary = Compiler.compile(program, compiler, flags)
+
+                times = [Executor.run(binary, Config.CVF_MATRIX_SIZE, Config.CVF_THREADS) for _ in range(Config.RUNS_PER_TEST)]
+                row.append(statistics.mean(times))
+            rows.append(row)
+        return headers, rows
+
+# ==========================================================
+# =========================== MAIN =========================
+# ==========================================================
+
+def print_experiment_summary():
+    print("\n================================================")
+    print("Benchmark Configuration")
+    print("------------------------------------------------")
+    print(f"Mode           : {Config.MODE}")
+    
+    if Config.MODE == "threads_vs_size":
+        print(f"Program        : {Config.TVS_PROGRAM}")
+        print(f"Matrix Sizes   : {Config.TVS_MATRIX_SIZES}")
+        print(f"Threads        : {Config.TVS_THREAD_VALUES}")
+        print(f"Compiler       : {Config.TVS_COMPILER}")
+        print(f"Flagset        : {Config.TVS_FLAGSET}")
+    elif Config.MODE == "program_vs_size":
+        print(f"Programs       : {Config.PVS_PROGRAMS}")
+        print(f"Matrix Sizes   : {Config.PVS_MATRIX_SIZES}")
+        print(f"Threads        : {Config.PVS_THREADS}")
+        print(f"Compiler       : {Config.PVS_COMPILER}")
+        print(f"Flagset        : {Config.PVS_FLAGSET}")
+    elif Config.MODE == "compiler_vs_flags":
+        print(f"Program        : {Config.CVF_PROGRAM}")
+        print(f"Matrix Size    : {Config.CVF_MATRIX_SIZE}")
+        print(f"Threads        : {Config.CVF_THREADS}")
+        print(f"Compilers      : {Config.CVF_COMPILERS}")
+        print(f"Flagsets       : {Config.CVF_FLAGSETS}")
+    print("================================================\n")
+
+def main():
+    Logger.info("Starting Universal Benchmark Framework")
+    Validator.validate()
+    print_experiment_summary()
+
+    if Config.MODE == "threads_vs_size":
+        headers, rows = Benchmarks.threads_vs_size()
+    elif Config.MODE == "program_vs_size":
+        headers, rows = Benchmarks.program_vs_size()
+    elif Config.MODE == "compiler_vs_flags":
+        headers, rows = Benchmarks.compiler_vs_flags()
+    else:
+        Logger.error("Unsupported benchmark mode")
+
+    csv_file = FilenameGenerator.generate_csv_filename(Config.MODE, headers)
+    tex_file = FilenameGenerator.generate_tex_filename(Config.MODE, headers)
+
+    OutputManager.write_csv(csv_file, headers, rows)
+    OutputManager.write_latex(tex_file, headers, rows)
+
+    Logger.success("Benchmark completed successfully")
+
+# ==========================================================
+# ============ POTENTIAL FUTURE QOL ENHANCEMENTS ===========
+# ==========================================================
+# [ ] CLI arguments via argparse to override Config dynamically
+# [ ] Progress bars using `tqdm` in the Executor loops
+# [ ] Automatic plotting: import matplotlib/seaborn and export .png
+# [ ] JSON export: Add `write_json()` to OutputManager for pipelines
+# [ ] Benchmark warm-up runs: Add a loop in Executor that ignores output
+# [ ] CPU affinity pinning: Append `taskset` or `numactl` to the command
+# [ ] Memory profiling: Prepend `/usr/bin/time -v` to the run command
+
+if __name__ == "__main__":
+    main()
