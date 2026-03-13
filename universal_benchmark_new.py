@@ -14,20 +14,26 @@ import datetime
 # ======================== CONFIG ==========================
 # ==========================================================
 
-OUTPUT_FOLDER = Path("benchmarks")
+OUTPUT_FOLDER = Path("benchmarks_omp")
+REPETITIONS = 3  
 
 # Concept: Allow 'None' in threads so sequential programs only get 1 argument (size)
 PARAMETERS = {
     "program": [
-        ("matrixmult_library.c", "sequential"),
-        ("matrixmult_opt.c", "sequential"),
-        # ("omp_matrixmult.c", "openmp"),
+        #("matrixmult_library.c", "sequential"),
+        #("matrixmult_opt.c", "sequential"),
+        ("omp_matrixmult_tiling_static.c", "openmp"),
+        ("omp_matrixmult_tiling_guided.c", "openmp"),
+        ("omp_matrixmult_tiling_dynamic.c", "openmp"),
+        ("omp_matrixmult_tiling_dynamic_16.c", "openmp"),
+        ("omp_matrixmult_tiling_dynamic_64.c", "openmp"),
+        ("omp_matrixmult_tiling_dynamic_256.c", "openmp"),
     ],
-    "size": [1000, 2000, 3000, 5000, 8000],
-    "threads": [None],  # Use None for sequential, use integers [1, 2, 4] for OpenMP
+    "size": [10000,15000],
+    "threads": [24],  # Use None for sequential, use integers [1, 2, 4] for OpenMP
     "compiler": ["icx"],
     "flagset": [
-        ["FAST"], 
+        #["FAST"], 
         ["OPT_O3", "CPU_NATIVE"]
     ]
 }
@@ -41,6 +47,8 @@ class Logger:
     def _ts(): return datetime.datetime.now().strftime("%H:%M:%S")
     @staticmethod
     def info(msg): print(f"[{Logger._ts()}] [INFO]  {msg}")
+    @staticmethod
+    def sub_info(msg): print(f"[{Logger._ts()}] [RUN]   |-- {msg}") # New visually distinct log
     @staticmethod
     def success(msg): print(f"[{Logger._ts()}] [OK]    {msg}")
     @staticmethod
@@ -183,24 +191,37 @@ class Compiler:
 
 class Executor:
     @staticmethod
-    def run(binary, size, threads):
+    def run(binary, size, threads, repetitions=1):
+        runtimes = []
         cmd = [str(binary), str(size)]
         if threads is not None:
             cmd.append(str(threads))
 
-        with StepTimer(f"Execution: {binary.name} (Size: {size}, Threads: {threads})"):
-            res = subprocess.run(cmd, capture_output=True, text=True)
-            
-            if res.returncode != 0:
-                Logger.error(f"Execution crashed:\n{res.stderr}")
+        Logger.info(f"Starting {repetitions} repetitions for: {binary.name} (Size: {size}, Threads: {threads})")
 
-            for line in res.stdout.splitlines():
-                if "Execution Time" in line or "Tempo di esecuzione" in line:
-                    runtime = float(line.split()[-2])
-                    Logger.info(f"Internal Runtime: {runtime}s")
-                    return runtime
-            
-            Logger.error(f"No execution time found in output:\n{res.stdout}")
+        for r in range(1, repetitions + 1):
+            with StepTimer(f"Run {r}/{repetitions}"):
+                res = subprocess.run(cmd, capture_output=True, text=True)
+                
+                if res.returncode != 0:
+                    Logger.error(f"Execution crashed on Run {r}:\n{res.stderr}")
+
+                found = False
+                for line in res.stdout.splitlines():
+                    if "Execution Time" in line or "Tempo di esecuzione" in line:
+                        runtime = float(line.split()[-2])
+                        Logger.sub_info(f"Recorded Time: {runtime}s")
+                        runtimes.append(runtime)
+                        found = True
+                        break
+                
+                if not found:
+                    Logger.error(f"No execution time found in output on Run {r}:\n{res.stdout}")
+        
+        # Concept: Aggregate the list of runtimes into a single mean value
+        mean_runtime = sum(runtimes) / len(runtimes)
+        Logger.success(f"Average Runtime over {repetitions} runs: {mean_runtime:.4f}s")
+        return mean_runtime
 
 # ==========================================================
 # ======================= PIPELINE =========================
@@ -238,7 +259,7 @@ class BenchmarkPipeline:
         with open(self.csv_path, "a", newline="") as f:
             writer = csv.writer(f)
             if write_header:
-                writer.writerow(keys + ["runtime"])
+                writer.writerow(keys + ["mean_runtime"])
                 f.flush()
 
             for i, combo in enumerate(combinations, 1):
@@ -255,7 +276,7 @@ class BenchmarkPipeline:
                     prog_file, prog_type, combo["compiler"], combo["flagset"]
                 )
                 
-                runtime = Executor.run(binary, combo["size"], combo["threads"])
+                runtime = Executor.run(binary, combo["size"], combo["threads"], repetitions=REPETITIONS)
                 
                 writer.writerow(list(csv_key) + [runtime])
                 f.flush() # Force save to disk immediately
