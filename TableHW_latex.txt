@@ -1,0 +1,25 @@
+\begin{table}[htbp]
+    \centering
+    \renewcommand{\arraystretch}{1.2} % Migliora la spaziatura tra le righe
+    \begin{tabular}{@{}ll@{}}
+        \toprule
+        \textbf{Component} & \textbf{Specification} \\
+        \midrule
+        \textbf{System} & HP Z2 Tower G9 Workstation \\
+        \textbf{Processor} & Intel Core i9-12900K (12th Gen, Alder Lake) \\
+        \textbf{Architecture} & Hybrid: 8 P-Cores (16 threads) + 8 E-Cores (8 threads) \\
+        \textbf{Logical Threads} & 24 \\
+        \textbf{Clock Frequency} & 800 MHz (Base) / 4.02 GHz (Max OS Reported) \\
+        \textbf{L1 Cache} & 640 KiB (Data) / 768 KiB (Instruction) \\
+        \textbf{L2 Cache} & 14 MiB (Cumulative across cores) \\
+        \textbf{L3 Cache} & 30 MiB (Shared Last Level Cache) \\
+        \textbf{NUMA Nodes} & 1 (Uniform Memory Access) \\
+        \textbf{Main Memory} & 62 GiB RAM \\
+        \textbf{Storage} & 953.9 GiB NVMe SSD \\
+        \textbf{Vector Capabilities} & AVX2, FMA (SIMD) \\
+        \textbf{Operating System} & Debian GNU/Linux 12 (Kernel 5.18.0) \\
+        \bottomrule
+    \end{tabular}
+    \caption{Hardware and Software Specifications of the experimental node.}
+    \label{tab:hw_specs}
+\end{table}
