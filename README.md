@@ -59,7 +59,7 @@ find /opt/intel -name "advixe-vars.sh" 2>/dev/null dovrebbe dare come output:
 /opt/intel/oneapi/advisor/2023.2.0/advixe-vars.sh
 
 
-2- icx -g -qopenmp -xHost -O3 -lm matrixmult_opt.c -o matrixmult_opt
+2- icx -g -xHost -O3 -lm matrixmult_opt.c -o matrixmult_opt
 
 
 3- advixe-cl --collect survey --project-dir ./progetto_advisor -- ./matrixmult_opt
