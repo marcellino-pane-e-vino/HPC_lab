@@ -1,12 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-
-// If your system has cblas, include this
 #include <cblas.h>
+#include <openblas_config.h>
 
-int main(int argc,char **argv) {
-   if (argc < 2) {
+int main(int argc, char **argv) {
+    if (argc < 2) {
         fprintf(stderr, "Error: missing n argument.\n");
         fprintf(stderr, "Usage: %s <n>\n", argv[0]);
         return 1;
@@ -14,29 +13,41 @@ int main(int argc,char **argv) {
 
     int n = atoi(argv[1]);
     if (n <= 0) {
-        fprintf(stderr, "Error: You forgot to provide n!.\n");
+        fprintf(stderr, "Error: invalid n.\n");
         return 1;
     }
 
-    int i, j;
+    /* Force sequential execution at runtime too */
+    setenv("OPENBLAS_NUM_THREADS", "1", 1);
+    setenv("GOTO_NUM_THREADS", "1", 1);
+    setenv("OMP_NUM_THREADS", "1", 1);
+    openblas_set_num_threads(1);
 
-    double ( *a )[n] = malloc(sizeof(double[n][n]));
-    double ( *b )[n] = malloc(sizeof(double[n][n]));
-    double ( *c )[n] = malloc(sizeof(double[n][n]));
+    double (*a)[n] = malloc(sizeof(double[n][n]));
+    double (*b)[n] = malloc(sizeof(double[n][n]));
+    double (*c)[n] = malloc(sizeof(double[n][n]));
 
-    // initialization
-    for (i=0; i<n; i++)
-        for (j=0; j<n; j++) {
+    if (!a || !b || !c) {
+        fprintf(stderr, "Error: memory allocation failed.\n");
+        free(a);
+        free(b);
+        free(c);
+        return 1;
+    }
+
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) {
             a[i][j] = 2.0;
             b[i][j] = 3.0;
             c[i][j] = 0.0;
         }
+    }
 
     printf("Starting the computation...\n");
-    clock_t start = clock();
 
-    // Use BLAS library: cblas_dgemm
-    // C = alpha * A * B + beta * C
+    struct timespec start, end;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
     double alpha = 1.0;
     double beta = 0.0;
 
@@ -48,13 +59,20 @@ int main(int argc,char **argv) {
                 beta,
                 &c[0][0], n);
 
-    clock_t end = clock();
-    double duration = (double)(end - start) / CLOCKS_PER_SEC;
-    printf("Execution Time: %.4f seconds\n", duration);
+    clock_gettime(CLOCK_MONOTONIC, &end);
+
+    double duration =
+        (end.tv_sec - start.tv_sec) +
+        (end.tv_nsec - start.tv_nsec) / 1e9;
+
+    printf("Execution Time: %.6f seconds\n", duration);
 
     FILE *f = fopen("mat-res.txt", "w");
     if (!f) {
         perror("fopen");
+        free(a);
+        free(b);
+        free(c);
         return 1;
     }
 
@@ -67,7 +85,6 @@ int main(int argc,char **argv) {
     }
 
     fclose(f);
-
     free(a);
     free(b);
     free(c);
