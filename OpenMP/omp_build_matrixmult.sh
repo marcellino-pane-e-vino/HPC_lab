@@ -8,7 +8,7 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR" || exit 1
 
-SRC_FILE="matrixmult_library.c"
+SRC_FILE="omp_matrixmult_library.c"
 EXECUTABLE="matrixmult"
 INSTALL_DIR="$HOME/local/OpenBLAS"
 
