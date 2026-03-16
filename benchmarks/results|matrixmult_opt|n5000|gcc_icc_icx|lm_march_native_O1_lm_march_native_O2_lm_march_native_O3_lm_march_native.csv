@@ -1,4 +1,0 @@
-compiler,lm_march=native,O1_lm_march=native,O2_lm_march=native,O3_lm_march=native
-gcc,218.2396,48.6095,42.1166,7.123
-icc,11.292,34.6011,11.1653,10.8396
-icx,10.1345,59.8958,10.1535,10.2821
