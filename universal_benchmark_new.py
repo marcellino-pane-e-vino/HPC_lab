@@ -14,20 +14,25 @@ import datetime
 # ======================== CONFIG ==========================
 # ==========================================================
 
-OUTPUT_FOLDER = Path("benchmarks_sequential")
+OUTPUT_FOLDER = Path("test_vhe_ha_fatto_WAX")
+
 REPETITIONS = 3  
 
 # Concept: Allow 'None' in threads so sequential programs only get 1 argument (size)
 PARAMETERS = {
     "program": [
     # ---- sequential zone ----
-        ("matrixmult_library.c", "sequential"),
-        ("matrixmult_opt.c", "sequential"),
+        #("matrixmult_library.c", "sequential"),
+        #("matrixmult_opt.c", "sequential"),
     
     # ---- OpenMP zone ----
         #("omp_matrixmult_library.c", "openmp"),
+        #("omp_matrixmult_tiling_CESSO_MA_FORTE.c", "openmp"),
+        ("omp_matrixmult_CESSO_COMPRESSO.c", "openmp"),
+        #("omp_matrixmult_tiling.c", "openmp"),
         #("omp_matrixmult_tiling_static.c", "openmp"),
         #("omp_matrixmult_tiling_guided.c", "openmp"),
+        #("omp_matrixmult_tiling_dynamic.c", "openmp")
         #("omp_matrixmult_tiling_guided_16.c", "openmp"),
         #("omp_matrixmult_tiling_guided_64.c", "openmp"),
         #("omp_matrixmult_tiling_guided_256.c", "openmp"),
@@ -35,9 +40,10 @@ PARAMETERS = {
         #("omp_matrixmult_tiling_dynamic_16.c", "openmp"),
         #("omp_matrixmult_tiling_dynamic_64.c", "openmp"),
         #("omp_matrixmult_tiling_dynamic_256.c", "openmp"),
+        
     ],
-    "size": [5000],
-    "threads": [None],  # Use None for sequential, use integers [1, 2, 4] for OpenMP
+    "size": [1000,2000,3000,5000,8000,10000,15000,20000],
+    "threads": [24],  # Use None for sequential, use integers [1, 2, 4] for OpenMP
     "compiler": ["icx"],
     "flagset": [
         #["FAST"], 
@@ -262,17 +268,28 @@ class Executor:
                 if res.returncode != 0:
                     Logger.error(f"Execution crashed on Run {r}:\n{res.stderr}")
 
-                found = False
-                for line in res.stdout.splitlines():
-                    if "Execution Time" in line or "Tempo di esecuzione" in line:
+            found = False
+            time_markers = (
+                "Execution Time",
+                "Tempo di esecuzione",
+                "Tempo totale",
+            )
+
+            for line in res.stdout.splitlines():
+                if any(marker in line for marker in time_markers):
+                    try:
                         runtime = float(line.split()[-2])
                         Logger.sub_info(f"Recorded Time: {runtime}s")
                         runtimes.append(runtime)
                         found = True
                         break
-                
-                if not found:
-                    Logger.error(f"No execution time found in output on Run {r}:\n{res.stdout}")
+                    except (ValueError, IndexError):
+                        Logger.error(
+                            f"Found a timing line but could not parse it on Run {r}:\n{line}\n\nFull output:\n{res.stdout}"
+            )
+
+            if not found:
+                Logger.error(f"No execution time found in output on Run {r}:\n{res.stdout}")
         
         # Concept: Aggregate the list of runtimes into a single mean value
         mean_runtime = sum(runtimes) / len(runtimes)
