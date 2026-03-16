@@ -21,14 +21,14 @@ REPETITIONS = 3
 PARAMETERS = {
     "program": [
     # ---- sequential zone ----
-        #("matrixmult_library.c", "sequential"),
+        ("matrixmult_library.c", "sequential"),
 
         #("matrixmult_opt.c", "sequential"),
     
     # ---- OpenMP zone ----
-        ("omp_matrixmult_library.c", "openmp"),
+        #("omp_matrixmult_library.c", "openmp"),
         #("omp_matrixmult_tiling_static.c", "openmp"),
-        ("omp_matrixmult_tiling_guided.c", "openmp"),
+        #("omp_matrixmult_tiling_guided.c", "openmp"),
         #("omp_matrixmult_tiling_guided_16.c", "openmp"),
         #("omp_matrixmult_tiling_guided_64.c", "openmp"),
         #("omp_matrixmult_tiling_guided_256.c", "openmp"),
@@ -37,11 +37,11 @@ PARAMETERS = {
         #("omp_matrixmult_tiling_dynamic_64.c", "openmp"),
         #("omp_matrixmult_tiling_dynamic_256.c", "openmp"),
     ],
-    "size": [10000,15000],
+    "size": [5000],
     "threads": [24],  # Use None for sequential, use integers [1, 2, 4] for OpenMP
     "compiler": ["icx"],
     "flagset": [
-        #["FAST"], 
+        ["FAST"], 
         ["OPT_O3", "CPU_NATIVE"]
     ]
 }
@@ -136,74 +136,111 @@ class Compiler:
     def compile(self, file_path, ptype, compiler_name, user_flags):
         path = Path(file_path).resolve()
         flags = self._get_flags(ptype, compiler_name, user_flags)
-        
-        # Concept: Hash the exact flags to guarantee unique binaries
+
+        # Hash exact flags to guarantee unique binaries
         flag_hash = hashlib.md5(" ".join(flags).encode()).hexdigest()[:8]
         binary = self.out_dir / f"{path.stem}_{compiler_name}_{flag_hash}"
 
         cache_key = (str(path), compiler_name, tuple(flags))
-        
-        # FIX 1: Check memory cache FIRST. This preserves special paths.
+
+        Logger.info(f"Preparing compilation for: {path.name}")
+        Logger.sub_info(f"Resolved source path : {path}")
+        Logger.sub_info(f"Compiler            : {compiler_name}")
+        Logger.sub_info(f"Resolved flags      : {' '.join(flags) if flags else '(none)'}")
+        Logger.sub_info(f"Output binary       : {binary}")
+
+        # Memory cache first
         if cache_key in self.cache:
             cached_bin = self.cache[cache_key]
             Logger.info(f"CACHE HIT (Memory): {cached_bin.name}")
             return cached_bin
-            
-        # FIX 2: Check disk separately for standard binaries
+
+        # Disk cache only for standard binaries / previously generated binaries
         if binary.exists():
             Logger.info(f"CACHE HIT (Disk): {binary.name}")
             self.cache[cache_key] = binary
             return binary
 
         with StepTimer(f"Compiling {path.name} with {compiler_name} [{flag_hash}]"):
-            # Special case for the library build script
+
+            # Special case for BLAS sequential build script
             if path.name == "matrixmult_library.c":
                 build_script = path.parent / "build_matrixmult.sh"
-                if not os.access(build_script, os.X_OK): os.chmod(build_script, 0o755)
-                subprocess.run([str(build_script)], check=True)
-                special_bin = path.parent / "matrixmult"
-                
-                # Save the special path to memory cache
-                self.cache[cache_key] = special_bin 
-                return special_bin
+                if not os.access(build_script, os.X_OK):
+                    Logger.sub_info(f"Build script is not executable. Applying chmod +x to: {build_script}")
+                    os.chmod(build_script, 0o755)
 
-            # New special case for the OpenMP library build script
+                env = os.environ.copy()
+                env["SRC_FILE"] = path.name
+                env["COMPILER"] = compiler_name
+                env["EXECUTABLE"] = str(binary)
+                env["EXTRA_FLAGS"] = " ".join(flags)
+
+                shell_cmd = (
+                    f'SRC_FILE="{env["SRC_FILE"]}" '
+                    f'COMPILER="{env["COMPILER"]}" '
+                    f'EXECUTABLE="{env["EXECUTABLE"]}" '
+                    f'EXTRA_FLAGS="{env["EXTRA_FLAGS"]}" '
+                    f'"{build_script}"'
+                )
+
+                Logger.info(f"About to compile special file: {path.name}")
+                Logger.sub_info(f"Special build script : {build_script}")
+                Logger.sub_info(f"Shell command sent   : {shell_cmd}")
+
+                try:
+                    subprocess.run([str(build_script)], check=True, env=env)
+                    Logger.success(f"Special compilation completed successfully: {path.name}")
+                except subprocess.CalledProcessError as e:
+                    Logger.error(f"Special compilation failed for {path.name} with exit code {e.returncode}")
+
+                self.cache[cache_key] = binary
+                return binary
+
+            # Special case for BLAS OpenMP build script
             if path.name == "omp_matrixmult_library.c":
                 build_script = path.parent / "omp_build_matrixmult.sh"
-                if not os.access(build_script, os.X_OK): os.chmod(build_script, 0o755)
-                subprocess.run([str(build_script)], check=True)
-                special_bin = path.parent / "matrixmult"
+                if not os.access(build_script, os.X_OK):
+                    Logger.sub_info(f"Build script is not executable. Applying chmod +x to: {build_script}")
+                    os.chmod(build_script, 0o755)
 
-                # Save the special path to memory cache
-                self.cache[cache_key] = special_bin
-                return special_bin
+                env = os.environ.copy()
+                env["SRC_FILE"] = path.name
+                env["COMPILER"] = compiler_name
+                env["EXECUTABLE"] = str(binary)
+                env["EXTRA_FLAGS"] = " ".join(flags)
 
-            # Standard compilation (Intel env is already loaded globally)
+                shell_cmd = (
+                    f'SRC_FILE="{env["SRC_FILE"]}" '
+                    f'COMPILER="{env["COMPILER"]}" '
+                    f'EXECUTABLE="{env["EXECUTABLE"]}" '
+                    f'EXTRA_FLAGS="{env["EXTRA_FLAGS"]}" '
+                    f'"{build_script}"'
+                )
+
+                Logger.info(f"About to compile special file: {path.name}")
+                Logger.sub_info(f"Special build script : {build_script}")
+                Logger.sub_info(f"Shell command sent   : {shell_cmd}")
+
+                try:
+                    subprocess.run([str(build_script)], check=True, env=env)
+                    Logger.success(f"Special compilation completed successfully: {path.name}")
+                except subprocess.CalledProcessError as e:
+                    Logger.error(f"Special compilation failed for {path.name} with exit code {e.returncode}")
+
+                self.cache[cache_key] = binary
+                return binary
+
+            # Standard compilation
             cmd = [compiler_name] + flags + [str(path), "-o", str(binary)]
+            Logger.sub_info(f"Standard compile command: {' '.join(cmd)}")
+
             res = subprocess.run(cmd, capture_output=True, text=True)
-            
+
             if res.returncode != 0:
                 Logger.error(f"Compile failed:\n{res.stderr}")
-
-        self.cache[cache_key] = binary
-        return binary
-
-        with StepTimer(f"Compiling {path.name} with {compiler_name} [{flag_hash}]"):
-            # Special case for the library build script
-            if path.name == "matrixmult_library.c":
-                build_script = path.parent / "build_matrixmult.sh"
-                if not os.access(build_script, os.X_OK): os.chmod(build_script, 0o755)
-                subprocess.run([str(build_script)], check=True)
-                special_bin = path.parent / "matrixmult"
-                self.cache[cache_key] = special_bin
-                return special_bin
-
-            # Standard compilation (Intel env is already loaded globally)
-            cmd = [compiler_name] + flags + [str(path), "-o", str(binary)]
-            res = subprocess.run(cmd, capture_output=True, text=True)
-            
-            if res.returncode != 0:
-                Logger.error(f"Compile failed:\n{res.stderr}")
+            else:
+                Logger.success(f"Standard compilation completed successfully: {binary.name}")
 
         self.cache[cache_key] = binary
         return binary
@@ -335,7 +372,7 @@ class BenchmarkPipeline:
             filename = default_name
             print(f"Using default file name: {filename}")
         else:
-            filename = user_input
+            filename = user_input+".csv"
             print(f"Using custom file name: {filename}")
         self.csv_path = self.compiler.out_dir / filename
         print("=" * 60 + "\n")
