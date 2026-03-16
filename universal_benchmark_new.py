@@ -20,19 +20,24 @@ REPETITIONS = 3
 # Concept: Allow 'None' in threads so sequential programs only get 1 argument (size)
 PARAMETERS = {
     "program": [
+    # ---- sequential zone ----
         #("matrixmult_library.c", "sequential"),
+
         #("matrixmult_opt.c", "sequential"),
+    
+    # ---- OpenMP zone ----
+        ("omp_matrixmult_library.c", "openmp"),
         #("omp_matrixmult_tiling_static.c", "openmp"),
-        #("omp_matrixmult_tiling_guided.c", "openmp"),
-        ("omp_matrixmult_tiling_guided_16.c", "openmp"),
-        ("omp_matrixmult_tiling_guided_64.c", "openmp"),
-        ("omp_matrixmult_tiling_guided_256.c", "openmp"),
+        ("omp_matrixmult_tiling_guided.c", "openmp"),
+        #("omp_matrixmult_tiling_guided_16.c", "openmp"),
+        #("omp_matrixmult_tiling_guided_64.c", "openmp"),
+        #("omp_matrixmult_tiling_guided_256.c", "openmp"),
         #("omp_matrixmult_tiling_dynamic.c", "openmp"),
         #("omp_matrixmult_tiling_dynamic_16.c", "openmp"),
         #("omp_matrixmult_tiling_dynamic_64.c", "openmp"),
         #("omp_matrixmult_tiling_dynamic_256.c", "openmp"),
     ],
-    "size": [5000,8000,10000,15000,20000],
+    "size": [10000,15000],
     "threads": [24],  # Use None for sequential, use integers [1, 2, 4] for OpenMP
     "compiler": ["icx"],
     "flagset": [
@@ -162,6 +167,17 @@ class Compiler:
                 self.cache[cache_key] = special_bin 
                 return special_bin
 
+            # New special case for the OpenMP library build script
+            if path.name == "omp_matrixmult_library.c":
+                build_script = path.parent / "omp_build_matrixmult.sh"
+                if not os.access(build_script, os.X_OK): os.chmod(build_script, 0o755)
+                subprocess.run([str(build_script)], check=True)
+                special_bin = path.parent / "matrixmult"
+
+                # Save the special path to memory cache
+                self.cache[cache_key] = special_bin
+                return special_bin
+
             # Standard compilation (Intel env is already loaded globally)
             cmd = [compiler_name] + flags + [str(path), "-o", str(binary)]
             res = subprocess.run(cmd, capture_output=True, text=True)
@@ -227,6 +243,62 @@ class Executor:
         return mean_runtime
 
 # ==========================================================
+# =================== FILENAME BUILDER =====================
+# ==========================================================
+class BenchmarkFilenameBuilder:
+
+    def __init__(self, params):
+        self.params = params
+
+    def _size_tag(self):
+        sizes = sorted(self.params.get("size", []))
+        if not sizes:
+            return "n0"
+        if len(sizes) == 1:
+            return f"n{sizes[0]}"
+        return f"n{sizes[0]}-{sizes[-1]}"
+
+    def _thread_tag(self):
+        threads = [t for t in self.params.get("threads", []) if t is not None]
+        if not threads:
+            return "t1"
+        if len(threads) == 1:
+            return f"t{threads[0]}"
+        return f"t{min(threads)}-{max(threads)}"
+
+    def _program_tag(self):
+        progs = self.params.get("program", [])
+        if not progs:
+            return "prog0"
+        return f"{len(progs)}prog"
+
+    def _parallel_tag(self):
+        types = {p[1] for p in self.params.get("program", [])}
+        if types == {"sequential"}:
+            return "seq"
+        if types == {"openmp"}:
+            return "omp"
+        return "mixed"
+
+    def _compiler_tag(self):
+        compilers = self.params.get("compiler", [])
+        if not compilers:
+            return "cc"
+        return compilers[0]
+
+    def build(self):
+        parts = [
+            "bench",
+            self._parallel_tag(),
+            self._program_tag(),
+            self._size_tag(),
+            self._thread_tag(),
+            self._compiler_tag()
+        ]
+
+        return "_".join(parts) + ".csv"
+
+# ==========================================================
 # ======================= PIPELINE =========================
 # ==========================================================
 
@@ -250,7 +322,29 @@ class BenchmarkPipeline:
         # Concept: Ensure every element is a string to match CSV readouts perfectly
         return tuple(str(combo[k]) for k in self.params.keys())
 
+    def _ask_output_filename(self):
+        default_name = BenchmarkFilenameBuilder(self.params).build()
+        print("\n" + "=" * 60)
+        print("BENCHMARK PIPELINE START")
+        print("=" * 60)
+        print("Choose a name for the results CSV file.")
+        print(f"Press ENTER to use the default name: {default_name}")
+        print("-" * 60)
+        user_input = input("Result file name: ").strip()
+        if user_input == "":
+            filename = default_name
+            print(f"Using default file name: {filename}")
+        else:
+            filename = user_input
+            print(f"Using custom file name: {filename}")
+        self.csv_path = self.compiler.out_dir / filename
+        print("=" * 60 + "\n")
+
     def run(self):
+        self._ask_output_filename()
+
+        self.completed_runs = self._load_cache()
+
         keys, values = list(self.params.keys()), list(self.params.values())
         combinations = [dict(zip(keys, v)) for v in product(*values)]
         
