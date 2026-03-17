@@ -205,3 +205,34 @@ GCC - FLAG - MACRO
 To be not redundant, the same results were obtained through ICX, even without any flag, since ICX is able to apply optmization alone (smart compiler)
 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Gemini ha detto
+Questa è un'osservazione fantastica. Aver notato empiricamente questa differenza nei tempi di esecuzione significa che stai letteralmente "toccando" i limiti fisici dell'hardware attraverso il codice C.
+
+Il motivo per cui il blocco ottimale si dimezza (da 64 a 32) quando rimuovi la trasposizione non è dovuto a un errore nel codice, ma a due colli di bottiglia hardware precisi: lo spreco delle Cache Line e la saturazione del TLB.
+
+Per avere la certezza di padroneggiare queste dinamiche architetturali, ecco i tre concetti esatti che spiegano il fenomeno.
+
+1. L'Efficienza della Cache Line (Il problema dello spreco)
+Quando la CPU ha bisogno di un singolo double (8 byte) dalla RAM, non porta nella Cache L1 solo quel numero. Porta un intero blocco contiguo di 64 byte, chiamato Cache Line (ovvero 8 numeri double adiacenti).
+
+Nel caso CON Trasposizione (Stride-1): Il ciclo legge in orizzontale. La CPU carica una Cache Line con 8 numeri e il tuo codice li usa tutti e 8 in sequenza. L'efficienza spaziale è del 100%. Un blocco 64x64 entra in Cache in modo compatto e ogni singolo byte caricato è utile al calcolo.
+
+Nel caso SENZA Trasposizione (Stride-N): Il ciclo scorre la colonna in verticale. La CPU carica una Cache Line per darti b[k*N+j], ma tu ne usi solo 1. Gli altri 7 numeri caricati in Cache vengono ignorati, perché all'iterazione successiva il codice salta alla riga sotto. L'efficienza crolla al 12.5%.
+
+2. Il "Cache Thrashing" (Saturazione artificiale)
+A causa dello spreco appena visto, nel caso senza trasposizione la tua Cache L1 si riempie per l'87.5% di "spazzatura" (numeri adiacenti alla colonna che stai leggendo, ma che al momento non ti servono).
+
+Se tenti di usare un blocco grande (64x64), la quantità di queste Cache Line frammentate supera rapidamente la capacità fisica della L1. La Cache si riempie e la CPU è costretta a "sfrattare" continuamente dati utili per far spazio a quelli nuovi, rallentando enormemente il calcolo (Cache Thrashing).
+Riducendo il blocco a 32x32, dimezzi l'ingombro. Chiedi alla CPU una porzione di matrice sufficientemente piccola da poter "sopravvivere" all'interno della L1 nonostante l'enorme spreco di spazio causato dalla lettura verticale.
+
+3. La Pressione sul TLB (Il vero muro invisibile)
+La memoria RAM è divisa fisicamente dal sistema operativo in "Pagine" (solitamente da 4 KB ciascuna). La CPU possiede una micro-cache specializzata chiamata TLB (Translation Lookaside Buffer) che ricorda gli indirizzi fisici di queste pagine per non doverli ricalcolare ogni volta.
+
+Il problema è che il TLB è minuscolo (spesso può ricordare solo 64 pagine contemporaneamente).
+
+Con un blocco 64x64 senza trasposizione: Il ciclo salta su 64 righe distanti tra loro ad ogni passo. In una matrice grande, queste 64 righe si trovano quasi certamente su 64 Pagine di memoria diverse. Saturi il TLB all'istante. Ad ogni iterazione, il TLB fallisce (TLB Miss) e la CPU deve congelare il calcolo per interrogare la RAM e ricalcolare gli indirizzi.
+
+Con un blocco 32x32: Tocchi contemporaneamente solo 32 righe. Il TLB riesce a mantenere in memoria le 32 Pagine necessarie senza andare in affanno e la CPU non si ferma mai.
+
+In sintesi: la trasposizione ordina i dati così bene che la CPU riesce a digerire blocchi grandi (64x64). Senza trasposizione, il disordine in memoria è tale che devi "imboccare" la CPU con blocchi molto più piccoli (32x32) per evitare che si ingolfi.
