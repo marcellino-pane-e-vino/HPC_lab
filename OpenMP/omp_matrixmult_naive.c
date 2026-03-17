@@ -4,8 +4,8 @@
 #include <omp.h>
 
 int main(int argc, char **argv) {
-  // Controlliamo che Python ci abbia passato sia N che i Thread
-  if (argc < 3) {
+
+   if (argc < 3) {
       printf("Errore: devi passare N e NUM_THREADS come argomenti!\n");
       return 1;
   }
@@ -16,13 +16,27 @@ int main(int argc, char **argv) {
   
   // Imponiamo a OpenMP quanti thread usare per questo run
   omp_set_num_threads(num_threads);
-
-  int i, j, k;
   
   // Allocazione dinamica
-  double (*a)[n] = malloc(sizeof(double[n][n]));
-  double (*b)[n] = malloc(sizeof(double[n][n]));
-  double (*c)[n] = malloc(sizeof(double[n][n]));
+  //double (*a)[n] = malloc(sizeof(double[n][n]));
+  //double (*b)[n] = malloc(sizeof(double[n][n]));
+  //double (*c)[n] = malloc(sizeof(double[n][n]));
+
+
+  /********* IMPROVEMENT *********/
+  // 1. Calcoliamo la memoria esatta richiesta dalla matrice
+  size_t bytes = sizeof(double[n][n]);
+  
+  // 2. Arrotondiamo la dimensione al multiplo di 64 successivo
+  // (Requisito rigido dello standard C per aligned_alloc)
+  size_t aligned_bytes = (bytes + 63) & ~63;
+
+  // 3. Allocazione con memoria allineata a 64-byte e puntatori "restrict"
+  double (* restrict a)[n] = aligned_alloc(64, aligned_bytes);
+  double (* restrict b)[n] = aligned_alloc(64, aligned_bytes);
+  double (* restrict c)[n] = aligned_alloc(64, aligned_bytes);
+
+
 
   if (!a || !b || !c) {
       printf("Errore: Memoria insufficiente per N=%d!\n", n);
@@ -31,9 +45,9 @@ int main(int argc, char **argv) {
 
   printf("Inizializzazione parallela con %d thread...\n", num_threads);
   
-  #pragma omp parallel for shared(a, b, c) private(i, j) schedule(static)
-  for (i = 0; i < n; i++) {
-     for (j = 0; j < n; j++) {
+  #pragma omp parallel for
+  for (int i = 0; i < n; i++) {
+     for (int j = 0; j < n; j++) {
         a[i][j] = 2.0;
         b[i][j] = 3.0;
         c[i][j] = 0.0;
@@ -45,13 +59,13 @@ int main(int argc, char **argv) {
   double start_time = omp_get_wtime(); 
 
   // Qui gestiamo i thread sui vari core
-  #pragma omp parallel for shared(a, b, c) private(i, j, k) schedule(static)
-  for (i = 0; i < n; ++i) {
-     for (k = 0; k < n; k++) {
+  #pragma omp parallel for schedule(dynamic, 32)
+  for (int i = 0; i < n; ++i) {
+     for (int k = 0; k < n; k++) {
         
         // Qui forziamo la vettorizzazione SIMD all'interno del singolo core!
-        #pragma omp simd
-        for (j = 0; j < n; ++j) {
+        //#pragma omp simd
+        for (int j = 0; j < n; ++j) {
            c[i][j] += a[i][k] * b[k][j];
         }
      }
