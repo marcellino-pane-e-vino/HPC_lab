@@ -1,4 +1,4 @@
-# Ottimizzazione della Moltiplicazione di Matrici su GPU (N=15000)
+# **Ottimizzazione della Moltiplicazione di Matrici su GPU (N=15000)**
 
 Questo documento analizza e confronta due diverse implementazioni per la moltiplicazione di due matrici quadrate di dimensione $15.000 \times 15.000$ in singola precisione (FP32) su architettura NVIDIA (GPU T4). L'obiettivo è evidenziare il salto prestazionale tra un kernel CUDA ottimizzato manualmente e l'utilizzo della libreria matematica di livello industriale fornita da NVIDIA.
 
