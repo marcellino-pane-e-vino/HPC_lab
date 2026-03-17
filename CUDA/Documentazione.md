@@ -1,52 +1,47 @@
-# La Storia di Due Codici: Come abbiamo spinto la GPU oltre i suoi limiti
+# Analisi dell'Ottimizzazione per la Moltiplicazione di Matrici su GPU (N=15000)
 
-Immagina di avere una missione titanica: prendere due griglie di numeri gigantesche, ciascuna formata da 15.000 righe e 15.000 colonne, e moltiplicarle tra loro. Stiamo parlando di eseguire oltre 3 miliardi e mezzo di operazioni matematiche nel minor tempo possibile. 
+Il presente documento illustra il processo di ottimizzazione e l'analisi prestazionale relativi alla moltiplicazione di due matrici dense di dimensione $15.000 \times 15.000$ in singola precisione (FP32). L'operazione richiede l'esecuzione di oltre 3,375 miliardi di moltiplicazioni e altrettante addizioni, per un totale di circa 6,75 Tera-operazioni. I test sono stati condotti su un'architettura NVIDIA T4. 
 
-Per farlo, abbiamo a disposizione un motore fuoriserie: una GPU NVIDIA T4. Abbiamo testato due "assetti" diversi per questo motore. Il primo è un'ottimizzazione fatta a mano da noi, pezzo per pezzo; il secondo usa il software ufficiale della casa madre. 
-
-Ecco il racconto di cosa è successo dentro il silicio della scheda video durante questi due test.
+Di seguito vengono messe a confronto due diverse metodologie di implementazione, analizzando i dati di profilazione per comprendere le dinamiche architetturali sottostanti.
 
 ---
 
-## Atto Primo: L'approccio "Artigianale" (Il nostro Tiling)
+## 1. Implementazione Custom: Tiling in Shared Memory
 
-Nel primo esperimento, abbiamo scritto il codice dicendo esattamente a ogni singolo "operaio" (i thread della GPU) cosa fare. 
-
-Sapevamo fin dall'inizio che far viaggiare gli operai continuamente verso il magazzino principale (la memoria globale della scheda, che è enorme ma lenta) sarebbe stato un disastro. Quindi abbiamo usato una tecnica chiamata **Tiling**. 
+La prima implementazione esaminata si avvale di un kernel CUDA sviluppato ad hoc, progettato per mitigare le latenze di accesso alla memoria globale della GPU tramite la tecnica del **Tiling**. 
 
 
-Abbiamo diviso l'immenso lavoro in piccole "piastrelle" da 32x32 numeri. I thread lavorano in squadra: vanno al magazzino, prendono una piastrella, la portano su una scrivania super-veloce che hanno in condivisione (la *Shared Memory*) e lì fanno tutti i calcoli a una velocità sbalorditiva. Finita una piastrella, passano alla successiva.
+Invece di far accedere i singoli thread direttamente alla memoria VRAM (capiente ma caratterizzata da un'alta latenza), il calcolo viene suddiviso in "piastrelle" (Tile) da $32 \times 32$ elementi. I thread all'interno di un blocco collaborano per caricare una piastrella alla volta all'interno della *Shared Memory* (una memoria cache a bassissima latenza condivisa a livello di blocco multiprocessore). Una volta caricati i dati, vengono eseguite le operazioni aritmetiche, per poi procedere iterativamente alla piastrella successiva.
 
-**I risultati sul campo:**
-Il cronometro si è fermato a **7,33 secondi**. 
-Guardando i log del profiler, abbiamo scoperto che la scheda video ha passato oltre il 92% di questo tempo a fare pura matematica, tenendo i processori costantemente sotto sforzo. 
-E il tempo perso a spostare i dati dalla RAM del computer alla memoria della scheda video tramite il cavo della scheda madre? Ci ha messo circa 600 millisecondi. Un tempo ridicolo (appena l'8% del totale) rispetto alla mole di calcoli. In gergo tecnico, diciamo che eravamo in una situazione **"Compute-Bound"**: il nostro unico limite era quanto velocemente i chip riuscissero a moltiplicare.
+**Risultati della profilazione:**
+L'esecuzione di questa implementazione ha registrato un tempo di calcolo puro (latenza del kernel) di **7,33 secondi**.
+L'analisi dei log rivela che la GPU ha dedicato oltre il 92% del tempo totale di attività all'esecuzione delle operazioni matematiche. Di contro, il trasferimento fisico dei dati dalla memoria RAM dell'host alla VRAM del device (tramite bus PCI-Express) ha richiesto circa 600 millisecondi, incidendo solo per l'8% sul tempo complessivo. 
+Questo scenario configura un classico problema **"Compute-Bound"**: il fattore limitante delle prestazioni è la pura capacità di calcolo (il throughput delle ALU), mentre la larghezza di banda verso la memoria non rappresenta un collo di bottiglia significativo.
 
 ---
 
-## Atto Secondo: L'Artiglieria Pesante (cuBLAS)
+## 2. Implementazione Industriale: Utilizzo della libreria cuBLAS
 
-Per il secondo esperimento, abbiamo buttato via la gestione manuale di operai, piastrelle e scrivanie. Abbiamo chiamato in causa **cuBLAS**, la libreria matematica scritta in linguaggio macchina direttamente dagli ingegneri che hanno costruito la GPU. 
+La seconda implementazione sostituisce il kernel custom con l'utilizzo di **cuBLAS**, la libreria di algebra lineare ottimizzata nativamente da NVIDIA. 
 
-Qui è successa una vera e propria magia nera dell'informatica. Il profiler ci ha svelato che cuBLAS non si è limitato a eseguire un calcolo: prima di partire, ha interrogato la nostra scheda video per capire esattamente quanti processori avesse a disposizione. Scoprendo di trovarsi su un'architettura avanzata, ha usato delle istruzioni segrete (chiamate `volta_sgemm_128x128_nn`) in grado di manipolare piastrelle immense, da 128x128 numeri, tenendo accesi i circuiti senza sprecare nemmeno un millesimo di secondo.
 
-**I risultati sul campo:**
-Il tempo di calcolo è letteralmente crollato a **1,35 secondi**. 
-Abbiamo accelerato il programma di oltre 5 volte, semplicemente chiedendo al software NVIDIA di prendere il volante. Un risultato da 5 trilioni di operazioni al secondo.
+La profilazione rivela che cuBLAS non si limita a lanciare un kernel statico. Prima dell'esecuzione vera e propria, la libreria effettua un'interrogazione dell'hardware (tramite chiamate API come `cudaOccupancyMaxActiveBlocksPerMultiprocessor`) per determinare il numero esatto di multiprocessori disponibili sulla T4. Sulla base di questi dati, viene lanciato un kernel altamente specializzato (denominato `volta_sgemm_128x128_nn`), scritto in linguaggio assembly e capace di processare enormi piastrelle da $128 \times 128$ elementi, massimizzando l'occupazione dei registri e attivando le istruzioni hardware più efficienti disponibili sul silicio.
+
+**Risultati della profilazione:**
+Il tempo di esecuzione del kernel è sceso drasticamente a **1,35 secondi**, registrando uno speedup di oltre 5 volte rispetto alla versione custom e sviluppando una potenza di calcolo pratica di circa 5 TeraFLOPS.
 
 ---
 
-## Il Gran Finale: Lo schianto contro il "Muro della Memoria"
+## 3. Analisi Comparativa: L'impatto del "Memory Wall"
 
-È mettendo a confronto questi due test che emerge la lezione più affascinante di tutta l'architettura dei computer. 
+Il confronto tra le due implementazioni permette di osservare empiricamente il limite fisico noto come **Memory Wall** (o muro della memoria).
 
-Ricordi quei 600 millisecondi che servivano per far viaggiare i dati iniziali dal computer alla scheda video attraverso il cavo PCI-Express? 
-La fisica non fa sconti a nessuno: che tu usi il codice artigianale o cuBLAS, i byte pesano sempre uguale e il cavo è sempre lo stesso. Quei 600 millisecondi sono rimasti invariati.
+Il tempo necessario per trasferire le matrici originali dalla CPU alla GPU attraverso il bus PCIe è rimasto invariato in entrambi i test (circa 600 millisecondi totali), trattandosi di un limite fisico dettato dall'hardware di interconnessione e dal volume dei dati (byte).
 
-Ma guarda come cambia la prospettiva:
-Nel primo test, 600 millisecondi di viaggio su 7,3 secondi di calcolo erano una bazzecola (l'8%). 
-Nel secondo test, la GPU ha polverizzato i calcoli in appena 1,35 secondi. All'improvviso, quei 600 millisecondi di viaggio sono diventati quasi il **30% del tempo totale** in cui la scheda è rimasta accesa!
 
-Abbiamo ottimizzato la matematica in modo così estremo da schiantarci contro quello che gli ingegneri chiamano il **"Memory Wall"** (il muro della memoria). La nostra GPU ora è così veloce a fare le moltiplicazioni che passa un terzo del suo tempo a girarsi i pollici, aspettando che il cavo della scheda madre finisca di inviarle i numeri su cui lavorare. 
+Tuttavia, l'impatto relativo di questo trasferimento cambia radicalmente:
+* Nel primo scenario (Tiling manuale), 600 millisecondi di trasferimento risultavano marginali rispetto agli oltre 7 secondi necessari per l'elaborazione matematica.
+* Nel secondo scenario (cuBLAS), l'ottimizzazione estrema del calcolo ha ridotto il tempo del kernel a soli 1,35 secondi. Di conseguenza, i 600 millisecondi di trasferimento dati sono arrivati a occupare **quasi il 30% del tempo totale** di attività della scheda.
 
-Siamo passati da un problema in cui eravamo lenti a calcolare, a un problema in cui siamo limitati esclusivamente dalla velocità dei cavi di trasmissione. Abbiamo raggiunto il vero limite fisico della macchina.
+**Conclusioni:**
+L'adozione di software altamente ottimizzato ha permesso di saturare completamente la capacità logico-aritmetica dell'architettura T4. Questo processo ha causato uno spostamento del collo di bottiglia del sistema: l'algoritmo è passato dall'essere limitato dalla velocità di calcolo (*Compute-Bound*) all'essere pesantemente limitato dalla larghezza di banda del bus di sistema (*Bandwidth-Bound*), dimostrando come, a regimi di altissime prestazioni, il tempo speso per fornire i dati ai processori diventi il fattore critico predominante.
