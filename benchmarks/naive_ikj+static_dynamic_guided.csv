@@ -1,0 +1,25 @@
+program,size,threads,compiler,flagset,mean_runtime
+,8000,24,icx,"['OPT_O3', 'CPU_NATIVE']",10.558769
+"('omp_matrixmult_naive_static.c', 'openmp')",8000,24,icx,"['OPT_O3', 'CPU_NATIVE']",14.997514
+"('omp_matrixmult_naive_dynamic.c', 'openmp')",8000,24,icx,"['OPT_O3', 'CPU_NATIVE']",15.7552466666667
+"('omp_matrixmult_naive_guided.c', 'openmp')",10000,24,icx,"['OPT_O3', 'CPU_NATIVE']",21.194357
+"('omp_matrixmult_naive_dynamic.c', 'openmp')",10000,24,icx,"['OPT_O3', 'CPU_NATIVE']",27.6379283333333
+"('omp_matrixmult_naive_static.c', 'openmp')",10000,24,icx,"['OPT_O3', 'CPU_NATIVE']",28.9740936666667
+"('omp_matrixmult_naive_guided.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",71.86583
+"('omp_matrixmult_naive_static.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",98.710841
+"('omp_matrixmult_naive_dynamic.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",111.066458333333
+"('omp_matrixmult_naive_guided.c', 'openmp')",20000,24,icx,"['OPT_O3', 'CPU_NATIVE']",171.548920333333
+"('omp_matrixmult_naive_static.c', 'openmp')",20000,24,icx,"['OPT_O3', 'CPU_NATIVE']",264.501376
+"('omp_matrixmult_naive_dynamic.c', 'openmp')",20000,24,icx,"['OPT_O3', 'CPU_NATIVE']",275.240354333333
+"('omp_ikj_dynamic.c', 'openmp')",8000,24,icx,"['OPT_O3', 'CPU_NATIVE']",3.36796666666667
+"('omp_ikj_guided.c', 'openmp')",8000,24,icx,"['OPT_O3', 'CPU_NATIVE']",3.376337
+"('omp_ikj_static.c', 'openmp')",8000,24,icx,"['OPT_O3', 'CPU_NATIVE']",3.64757033333333
+"('omp_ikj_guided.c', 'openmp')",10000,24,icx,"['OPT_O3', 'CPU_NATIVE']",6.627164
+"('omp_ikj_dynamic.c', 'openmp')",10000,24,icx,"['OPT_O3', 'CPU_NATIVE']",6.66168
+"('omp_ikj_static.c', 'openmp')",10000,24,icx,"['OPT_O3', 'CPU_NATIVE']",7.16327933333333
+"('omp_ikj_guided.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",22.2426093333333
+"('omp_ikj_dynamic.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",22.2955446666667
+"('omp_ikj_static.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",23.312574
+"('omp_ikj_guided.c', 'openmp')",20000,24,icx,"['OPT_O3', 'CPU_NATIVE']",53.3740716666667
+"('omp_ikj_dynamic.c', 'openmp')",20000,24,icx,"['OPT_O3', 'CPU_NATIVE']",53.5172793333333
+"('omp_ikj_static.c', 'openmp')",20000,24,icx,"['OPT_O3', 'CPU_NATIVE']",56.8868886666667
