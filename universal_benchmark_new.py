@@ -14,7 +14,7 @@ import datetime
 # ======================== CONFIG ==========================
 # ==========================================================
 
-OUTPUT_FOLDER = Path("test_vhe_ha_fatto_WAX")
+OUTPUT_FOLDER = Path("test_di_oggi")
 
 REPETITIONS = 3  
 
@@ -26,23 +26,16 @@ PARAMETERS = {
         #("matrixmult_opt.c", "sequential"),
     
     # ---- OpenMP zone ----
+        #("omp_matrixmult_naive.c", "openmp"),
         #("omp_matrixmult_library.c", "openmp"),
-        #("omp_matrixmult_tiling_CESSO_MA_FORTE.c", "openmp"),
-        ("omp_matrixmult_CESSO_COMPRESSO.c", "openmp"),
-        #("omp_matrixmult_tiling.c", "openmp"),
-        #("omp_matrixmult_tiling_static.c", "openmp"),
-        #("omp_matrixmult_tiling_guided.c", "openmp"),
-        #("omp_matrixmult_tiling_dynamic.c", "openmp")
-        #("omp_matrixmult_tiling_guided_16.c", "openmp"),
-        #("omp_matrixmult_tiling_guided_64.c", "openmp"),
-        #("omp_matrixmult_tiling_guided_256.c", "openmp"),
-        #("omp_matrixmult_tiling_dynamic.c", "openmp"),
-        #("omp_matrixmult_tiling_dynamic_16.c", "openmp"),
-        #("omp_matrixmult_tiling_dynamic_64.c", "openmp"),
-        #("omp_matrixmult_tiling_dynamic_256.c", "openmp"),
-        
+        ("omp_matrixmult_advanced_static.c", "openmp"),
+        ("omp_matrixmult_advanced_dynamic.c", "openmp"),
+        ("omp_matrixmult_advanced_guided.c", "openmp"),
+        ("omp_matrixmult_opt_static.c", "openmp"),
+        ("omp_matrixmult_opt_dynamic.c", "openmp"),
+        ("omp_matrixmult_opt_guided.c", "openmp")
     ],
-    "size": [1000,2000,3000,5000,8000,10000,15000,20000],
+    "size": [8000,10000,15000,20000],
     "threads": [24],  # Use None for sequential, use integers [1, 2, 4] for OpenMP
     "compiler": ["icx"],
     "flagset": [
