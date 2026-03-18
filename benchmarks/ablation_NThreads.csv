@@ -1,6 +1,0 @@
-program,size,threads,compiler,flagset,mean_runtime
-"('omp_ikj_dynamic_4.c', 'openmp')",10000,4,icx,"['OPT_O3', 'CPU_NATIVE']",18.018597
-"('omp_ikj_dynamic_4.c', 'openmp')",10000,8,icx,"['OPT_O3', 'CPU_NATIVE']",9.323911666666667
-"('omp_ikj_dynamic_4.c', 'openmp')",10000,12,icx,"['OPT_O3', 'CPU_NATIVE']",7.594997333333333
-"('omp_ikj_dynamic_4.c', 'openmp')",10000,16,icx,"['OPT_O3', 'CPU_NATIVE']",6.971191
-"('omp_ikj_dynamic_4.c', 'openmp')",10000,24,icx,"['OPT_O3', 'CPU_NATIVE']",6.582648333333332
