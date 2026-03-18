@@ -1,0 +1,11 @@
+program,size,threads,compiler,flagset,mean_runtime
+"('omp_ikj.c', 'openmp')",15000,4,icx,"['OPT_O3', 'CPU_NATIVE']",60.284439
+"('omp_ikj.c', 'openmp')",15000,8,icx,"['OPT_O3', 'CPU_NATIVE']",31.691268
+"('omp_ikj.c', 'openmp')",15000,12,icx,"['OPT_O3', 'CPU_NATIVE']",25.892601
+"('omp_ikj.c', 'openmp')",15000,16,icx,"['OPT_O3', 'CPU_NATIVE']",23.389308
+"('omp_ikj.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",22.13833
+"('omp_ikj.c', 'openmp')",20000,4,icx,"['OPT_O3', 'CPU_NATIVE']",144.40391
+"('omp_ikj.c', 'openmp')",20000,8,icx,"['OPT_O3', 'CPU_NATIVE']",74.56813
+"('omp_ikj.c', 'openmp')",20000,12,icx,"['OPT_O3', 'CPU_NATIVE']",61.79983
+"('omp_ikj.c', 'openmp')",20000,16,icx,"['OPT_O3', 'CPU_NATIVE']",56.185918
+"('omp_ikj.c', 'openmp')",20000,24,icx,"['OPT_O3', 'CPU_NATIVE']",54.297177
