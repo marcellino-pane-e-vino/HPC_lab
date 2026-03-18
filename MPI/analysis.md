@@ -20,7 +20,7 @@ Questo progetto analizza le prestazioni di un algoritmo di moltiplicazione di ma
 I dati mostrano un comportamento tipico dei sistemi a memoria distribuita, caratterizzato da tre fasi distinte:
 
 ### 1. Scalabilità Ottimale (fino a 16 processi)
-Fino a $np=16$, il tempo di esecuzione diminuisce in modo significativo. Questo accade perché la taglia della matrice ($n=2000$) genera un carico di lavoro (complessità $O(n^3)$) sufficientemente grande da "nascondere" il tempo speso per inviare i dati tra i processi.
+Fino a $np=16$, il tempo di esecuzione diminuisce in modo significativo. Questo accade perché la taglia della matrice ($n=2000$) genera un carico di lavoro (complessità $O(n^3)$ sufficientemente grande da "nascondere" il tempo speso per inviare i dati tra i processi.
 
 
 
