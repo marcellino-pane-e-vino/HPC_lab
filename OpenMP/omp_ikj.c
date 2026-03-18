@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
     // PARALLELIZZAZIONE ESTERNA:
     // Collassiamo i blocchi ii e jj. Ogni thread riceve un "quadrante" C[ii..][jj..] unico.
     // Essendo i quadranti disgiunti, non c'è nessuna Race Condition!
-    #pragma omp parallel for schedule(dynamic, 8) collapse(2)
+    #pragma omp parallel for schedule(dynamic, 4) collapse(2)
     for (int ii = 0; ii < N; ii += BLOCK_SIZE) {
         for (int jj = 0; jj < N; jj += BLOCK_SIZE) {
             
