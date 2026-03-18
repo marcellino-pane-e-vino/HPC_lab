@@ -49,7 +49,7 @@ Dalle prove con 32 e 64 processi si nota un aumento dei tempi. Questo fenomeno Ã
 Compila il codice:
 ```bash
 mpicc matrixmult_mpi.c -o matrixmult_mpi
-
+```
 ---
 
 ### Un piccolo appunto sui risultati
