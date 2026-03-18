@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
   double start_time = omp_get_wtime(); 
 
   // Qui gestiamo i thread sui vari core
-  #pragma omp parallel for schedule(dynamic, 32)
+  #pragma omp parallel for schedule(dynamic, 4)
   for (int i = 0; i < n; ++i) {
      for (int k = 0; k < n; k++) {
         
