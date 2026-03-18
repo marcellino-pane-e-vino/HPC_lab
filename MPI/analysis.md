@@ -49,3 +49,7 @@ Dalle prove con 32 e 64 processi si nota un aumento dei tempi. Questo fenomeno �
 Compila il codice:
 ```bash
 mpicc matrixmult_mpi.c -o matrixmult_mpi
+
+
+### Un piccolo appunto sui risultati
+Efficienza crolla al **10%** con 64 processi? Questo è il segnale classico che stiamo usando troppi operai per un lavoro troppo piccolo. Se volessimo far tornare l'efficienza alta con 64 processi, dovremmo aumentare $n$ (ad esempio a 5000 o più), in modo che ogni processo abbia di nuovo abbastanza calcoli da fare per "giustificare" il tempo perso a scambiarsi i messaggi.
