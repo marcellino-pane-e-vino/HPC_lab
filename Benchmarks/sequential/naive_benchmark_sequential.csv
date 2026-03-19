@@ -1,8 +1,0 @@
-program,size,threads,compiler,flagset,mean_runtime
-"('matrixmult_naive.c', 'sequential')",1000,None,icx,"['OPT_O3', 'CPU_NATIVE']",0.0679
-"('matrixmult_naive.c', 'sequential')",2000,None,icx,"['OPT_O3', 'CPU_NATIVE']",0.6017
-"('matrixmult_naive.c', 'sequential')",3000,None,icx,"['OPT_O3', 'CPU_NATIVE']",2.0525
-"('matrixmult_naive.c', 'sequential')",5000,None,icx,"['OPT_O3', 'CPU_NATIVE']",10.1269
-"('matrixmult_naive.c', 'sequential')",8000,None,icx,"['OPT_O3', 'CPU_NATIVE']",39.2811
-"('matrixmult_naive.c', 'sequential')",10000,None,icx,"['OPT_O3', 'CPU_NATIVE']",76.9844
-"('matrixmult_naive.c', 'sequential')",15000,None,icx,"['OPT_O3', 'CPU_NATIVE']",259.1461
