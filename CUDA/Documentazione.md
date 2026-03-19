@@ -51,6 +51,7 @@ I tempi crollano drasticamente. A $N=20000$, passiamo da quasi 100 secondi a sol
 Infine, abbiamo testato cuBLAS, la libreria fornita direttamente da NVIDIA.
 
 ### I Dati (Scalabilità)
+* **N = 5000:** 1.35 secondi
 * **N = 10000:** 0.40 secondi
 * **N = 15000:** 1.29 secondi
 * **N = 20000:** 3.11 secondi
