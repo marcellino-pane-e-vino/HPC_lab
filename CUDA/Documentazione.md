@@ -70,9 +70,11 @@ La seguente tabella riassume l'efficienza in base alla dimensione del problema. 
 
 | Dimensione ($N$) | Naive (FP64) | Tiled + Coarsened (FP32) | cuBLAS (FP32) | Miglioramento (cuBLAS vs Naive) |
 | :--- | :--- | :--- | :--- | :--- |
-| **5.000** | 1.26 s | 0.26 s | N/A (Velocissimo) | ~ 5x (Stimato) |
+| **5.000** | 1.26 s | 0.26 s | 1.35 s | **Nessuno (Overhead)** |
 | **10.000** | 10.16 s | 1.69 s | 0.40 s | **~25x** |
 | **15.000** | 42.35 s | 6.09 s | 1.29 s | **~32x** |
 | **20.000** | 97.81 s | 14.49 s | 3.11 s | **~31x** |
 
-**Conclusione:** Per matrici di dimensioni limitate ($N < 1000$), un kernel naive potrebbe persino sembrare accettabile perché la memoria cache della GPU riesce a mascherare un po' di inefficienza. Ma appena scaliamo verso problemi reali del mondo Big Data o Deep Learning ($N=20000$), la mancata ottimizzazione della Memoria Globale porta a tempi di esecuzione inaccettabili. L'uso della Shared Memory e del Tiling è obbligatorio, mentre per le applicazioni in produzione, affidarsi a librerie ultra-ottimizzate come cuBLAS è la scelta standard.
+**Conclusione:** Analizzando i dati, emerge una dinamica fondamentale del calcolo su GPU. Per matrici "piccole" ($N \le 5000$), il tempo di esecuzione di cuBLAS (1.35 s) appare persino superiore a quello del kernel Naive (1.26 s). Questo non significa che cuBLAS calcoli più lentamente, ma che l'*overhead* di inizializzazione della libreria (la chiamata a `cublasCreate`, la creazione del contesto e le allocazioni interne) occupa più tempo del calcolo matematico stesso. 
+
+Tuttavia, appena scaliamo verso dimensioni da mondo reale ($N=20000$), il tempo di inizializzazione diventa irrilevante e la potenza bruta emerge: la mancata ottimizzazione degli accessi in Memoria Globale del Naive porta a tempi inaccettabili (quasi 100 secondi), mentre cuBLAS macina tutto in appena 3 secondi. L'uso della Shared Memory e del Tiling (come nel nostro secondo approccio) è un requisito minimo vitale, ma per applicazioni in produzione, affidarsi alle euristiche e all'assembly ultra-ottimizzato di cuBLAS resta la scelta imbattibile.
