@@ -76,13 +76,13 @@ La seguente tabella riassume l'efficienza in base alla dimensione del problema. 
 | **20.000** | 97.81 s | 14.49 s | 3.11 s | **~31x** |
 
 
-## Riepilogo Scalabilità e cuBLAS vs Tiled
+## Riepilogo Scalabilità e Confronto Finale
 
-La seguente tabella riassume l'efficienza in base alla dimensione del problema, mettendo in luce non solo l'abisso rispetto al codice Naive, ma anche il divario tra un'ottima implementazione manuale e una libreria iper-ottimizzata:
+La seguente tabella unificata riassume l'efficienza in base alla dimensione del problema, mettendo in luce sia l'abisso prestazionale rispetto al codice Naive, sia il divario tra un'ottima implementazione manuale e una libreria iper-ottimizzata:
 
 | Dimensione ($N$) | Naive (FP64) | Tiled + Coarsened (FP32) | cuBLAS (FP32) | Miglioramento (cuBLAS vs Naive) | Miglioramento (cuBLAS vs Tiled) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **5.000** | 1.26 s | 0.26 s | 1.35 s | **Nessuno** | **Tiled più veloce (~5x)** |
+| **5.000** | 1.26 s | 0.26 s | 1.35 s | **Nessuno (Overhead)** | **Tiled più veloce (~5x)** |
 | **10.000** | 10.16 s | 1.69 s | 0.40 s | **~25x** | **~4.2x** |
 | **15.000** | 42.35 s | 6.09 s | 1.29 s | **~33x** | **~4.7x** |
 | **20.000** | 97.81 s | 14.49 s | 3.11 s | **~31x** | **~4.6x** |
