@@ -75,6 +75,24 @@ La seguente tabella riassume l'efficienza in base alla dimensione del problema. 
 | **15.000** | 42.35 s | 6.09 s | 1.29 s | **~33x** |
 | **20.000** | 97.81 s | 14.49 s | 3.11 s | **~31x** |
 
-**Conclusione:** Analizzando i dati, emerge una dinamica fondamentale del calcolo su GPU. Per matrici "piccole" ($N \le 5000$), il tempo di esecuzione di cuBLAS (1.35 s) appare persino superiore a quello del kernel Naive (1.26 s). Questo non significa che cuBLAS calcoli più lentamente, ma che l'*overhead* di inizializzazione della libreria (la chiamata a `cublasCreate`, la creazione del contesto e le allocazioni interne) occupa più tempo del calcolo matematico stesso. 
 
-Tuttavia, appena scaliamo verso dimensioni da mondo reale ($N=20000$), il tempo di inizializzazione diventa irrilevante e la potenza bruta emerge: la mancata ottimizzazione degli accessi in Memoria Globale del Naive porta a tempi inaccettabili (quasi 100 secondi), mentre cuBLAS macina tutto in appena 3 secondi. L'uso della Shared Memory e del Tiling (come nel nostro secondo approccio) è un requisito minimo vitale, ma per applicazioni in produzione, affidarsi alle euristiche e all'assembly ultra-ottimizzato di cuBLAS resta la scelta imbattibile.
+## Riepilogo Scalabilità e Confronto Finale
+
+La seguente tabella riassume l'efficienza in base alla dimensione del problema, mettendo in luce non solo l'abisso rispetto al codice Naive, ma anche il divario tra un'ottima implementazione manuale e una libreria iper-ottimizzata:
+
+| Dimensione ($N$) | Naive (FP64) | Tiled + Coarsened (FP32) | cuBLAS (FP32) | Miglioramento (cuBLAS vs Naive) | Miglioramento (cuBLAS vs Tiled) |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **5.000** | 1.26 s | 0.26 s | 1.35 s | **Nessuno (Overhead)** | **Tiled più veloce (~5x)** |
+| **10.000** | 10.16 s | 1.69 s | 0.40 s | **~25x** | **~4.2x** |
+| **15.000** | 42.35 s | 6.09 s | 1.29 s | **~33x** | **~4.7x** |
+| **20.000** | 97.81 s | 14.49 s | 3.11 s | **~31x** | **~4.6x** |
+
+**Conclusione:** Analizzando i dati, emerge una dinamica fondamentale del calcolo su GPU e dell'ottimizzazione della memoria. 
+
+Per matrici "piccole" ($N \le 5000$), il tempo di esecuzione di cuBLAS (1.35 s) appare paradossalmente il peggiore di tutti, persino superiore a quello del kernel Naive (1.26 s) e nettamente battuto dal nostro kernel Tiled (0.26 s). Questo non significa che l'algoritmo di cuBLAS sia inefficiente, ma evidenzia il pesante *overhead* di inizializzazione della libreria: la creazione dell'handle (`cublasCreate`), la configurazione del contesto e le allocazioni di memoria interne richiedono più tempo dell'operazione matematica stessa. Su carichi di lavoro leggeri, un kernel custom snello parte e finisce prima che cuBLAS abbia finito di "scaldare i motori".
+
+Tuttavia, appena scaliamo verso dimensioni da mondo reale ($N \ge 10000$), l'overhead iniziale viene diluito e scompare, lasciando emergere la vera gerarchia delle performance. La mancata ottimizzazione degli accessi in Memoria Globale del Naive porta a tempi inaccettabili (quasi 100 secondi a $N=20000$), saturando totalmente la banda passante. 
+
+Il confronto più interessante è sicuramente quello tra **Tiled e cuBLAS**. Applicando fedelmente i concetti teorici (Shared Memory per abbattere gli accessi globali e Thread Coarsening sui registri per massimizzare il riutilizzo), il nostro kernel Tiled fa un lavoro eccezionale, abbattendo il tempo da 97 a 14 secondi. Eppure, cuBLAS risulta costantemente **quasi 5 volte più veloce** della nostra ottimizzazione manuale (~4.6x a $N=20000$). 
+
+Questo ci insegna una lezione cruciale: per quanto possiamo ottimizzare il codice C/C++, le librerie fornite dai produttori (scritte direttamente in assembly PTX/SASS) utilizzano euristiche hardware-specifiche, blocchi di Tiling enormi (es. 128x128) e prefetching aggressivo (Double Buffering) per nascondere il 100% della latenza. Comprendere e implementare il Tiling con la Shared Memory è un passaggio accademico e ingegneristico fondamentale per capire come "pensa" la GPU, ma quando si passa in produzione, la regola d'oro è sempre: affidati a cuBLAS.
