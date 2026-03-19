@@ -64,18 +64,6 @@ Dal profiler vediamo che usa un kernel chiamato `volta_sgemm_128x128_nn`. Questo
 
 ---
 
-## Riepilogo Scalabilità cuBLAS vs Naive
-
-La seguente tabella riassume l'efficienza in base alla dimensione del problema. Man mano che $N$ cresce, il divario si fa sempre più estremo:
-
-| Dimensione ($N$) | Naive (FP64) | Tiled + Coarsened (FP32) | cuBLAS (FP32) | Miglioramento (cuBLAS vs Naive) |
-| :--- | :--- | :--- | :--- | :--- |
-| **5.000** | 1.26 s | 0.26 s | 1.35 s | **Nessuno** |
-| **10.000** | 10.16 s | 1.69 s | 0.40 s | **~25x** |
-| **15.000** | 42.35 s | 6.09 s | 1.29 s | **~33x** |
-| **20.000** | 97.81 s | 14.49 s | 3.11 s | **~31x** |
-
-
 ## Riepilogo Scalabilità e Confronto Finale
 
 La seguente tabella unificata riassume l'efficienza in base alla dimensione del problema, mettendo in luce sia l'abisso prestazionale rispetto al codice Naive, sia il divario tra un'ottima implementazione manuale e una libreria iper-ottimizzata:
