@@ -1,63 +1,77 @@
-# Analisi e Ottimizzazione della Moltiplicazione di Matrici su GPU (N=15000)
+# Analisi Dettagliata: L'Evoluzione della Moltiplicazione di Matrici in CUDA
 
-Il presente documento espone l'analisi prestazionale di due diverse implementazioni per la moltiplicazione di due matrici quadrate di dimensione $15.000 \times 15.000$ su architettura NVIDIA (GPU T4). L'obiettivo è confrontare un kernel CUDA ottimizzato manualmente con l'utilizzo della libreria matematica di livello industriale cuBLAS, evidenziando le motivazioni architetturali alla base delle prestazioni ottenute.
+La moltiplicazione di matrici è l'algoritmo "Hello World" del calcolo parallelo ad alte prestazioni. È un problema computazionalmente intenso: per due matrici di dimensione $N \times N$, il numero di operazioni matematiche cresce con $O(N^3)$, mentre i dati necessari crescono con $O(N^2)$. Questa discrepanza tra calcoli e dati è il motivo per cui l'architettura della memoria della GPU gioca un ruolo così vitale. 
 
-## 1. Scelta del Formato Dati: Precisione Singola (FP32)
-
-Prima di analizzare le implementazioni, è fondamentale giustificare la scelta del formato a virgola mobile a precisione singola (`float` a 32 bit, o FP32) rispetto alla doppia precisione (`double` a 64 bit). Questa decisione tecnica si basa su tre fattori critici dell'architettura hardware:
-
-1.  **Dimezzamento del Footprint di Memoria:** Un elemento FP32 occupa 4 byte contro gli 8 byte di un FP64. Per tre matrici di dimensioni $15.000 \times 15.000$, l'occupazione totale scende da circa 5.4 GB a 2.7 GB. Questo dimezza il carico sul bus PCI-Express durante i trasferimenti Host-to-Device e Device-to-Host.
-2.  **Ottimizzazione della Shared Memory:** Poiché la Shared Memory per ogni blocco è fisicamente limitata, l'utilizzo di FP32 permette di caricare "piastrelle" (tile) più grandi a parità di byte, aumentando il riuso dei dati nei registri e riducendo gli accessi alla lenta memoria globale.
-3.  **Throughput Hardware:** Le GPU moderne, e in particolare l'architettura Turing (su cui è basata la T4), dispongono di un numero di core dedicati alle operazioni FP32 e INT32 nettamente superiore rispetto a quelli FP64. L'utilizzo della precisione singola sblocca il massimo potenziale teorico delle ALU (Arithmetic Logic Unit) della scheda.
-
-
+Analizziamo i tre approcci, mettendoli a confronto dal punto di vista dell'architettura hardware e della scalabilità al variare di $N$ (da 5.000 a 20.000).
 
 ---
 
-## 2. Implementazione 1: Tiling Manuale in Shared Memory
+## 1. L'Approccio Naive: Il Collo di Bottiglia della Memoria Globale
 
-La prima versione analizzata implementa la moltiplicazione tramite un kernel CUDA scritto ad hoc, utilizzando la tecnica del **Tiling**.
+Il primo kernel che abbiamo testato è la traduzione diretta dell'algoritmo sequenziale in un modello parallelo. Ogni thread calcola un singolo elemento della matrice risultante $C$.
 
-### Concetto Architetturale
-Per evitare che i thread accedano ripetutamente alla memoria globale (caratterizzata da elevata latenza), l'algoritmo suddivide il calcolo in blocchi (Tile) di dimensione $32 \times 32$. I thread appartenenti al medesimo blocco collaborano per caricare una singola Tile nella **Shared Memory**. Successivamente, mediante l'ausilio di barriere di sincronizzazione (`__syncthreads()`), eseguono le moltiplicazioni sui dati presenti in questa memoria cache ultra-veloce. Il processo viene ripetuto facendo scorrere la Tile lungo la riga e la colonna delle matrici di origine.
+### I Dati (Scalabilità)
+* **N = 5000:** 1.26 secondi
+* **N = 10000:** 10.16 secondi (aumento di ~8x)
+* **N = 15000:** 42.35 secondi 
+* **N = 20000:** 97.81 secondi 
 
+### Analisi e Problematiche
+Dal punto di vista della scalabilità pura, l'algoritmo rispetta la complessità teorica: raddoppiando $N$ (da 5k a 10k), il tempo aumenta di circa un fattore 8 ($2^3$). Tuttavia, le performance assolute sono estremamente basse. Perché?
 
+Il problema principale è il **rapporto Compute-to-Global-Memory-Access (CGMA)**. Nel kernel Naive, per eseguire un singolo calcolo di moltiplicazione e addizione (2 operazioni floating-point), il thread deve fare 2 letture dalla Memoria Globale (una da $A$ e una da $B$). La Memoria Globale ha una latenza enorme (centinaia di cicli di clock) e una banda limitata. Stiamo costringendo la GPU a rileggere gli stessi dati migliaia di volte, saturando il bus di memoria. La GPU passa il tempo ad "aspettare" i dati, risultando in un'esecuzione *Memory Bound*.
 
-### Analisi del Profiling (`nvprof`)
-L'esecuzione ha restituito i seguenti risultati:
-* **Tempo di esecuzione totale (Kernel):** $\approx 7.33$ secondi.
-* **Carico di lavoro GPU:** Il kernel `matMulTiledFloat` impegna la GPU per il **92.33%** del tempo di esecuzione complessivo.
-* **Trasferimenti di Memoria:** Le copie Host-to-Device (RAM $\rightarrow$ VRAM) e Device-to-Host (VRAM $\rightarrow$ RAM) richiedono complessivamente circa $600$ ms. 
-* **Diagnosi:** Rappresentando i trasferimenti di memoria solo l'8% del tempo totale, questa implementazione risulta fortemente **Compute-Bound**. Il collo di bottiglia risiede unicamente nella capacità di calcolo del kernel rispetto all'enorme mole di operazioni richieste (circa 3.375 miliardi di moltiplicazioni-addizioni).
-
----
-
-## 3. Implementazione 2: Ottimizzazione Avanzata tramite cuBLAS
-
-La seconda versione delega l'intera operazione alla libreria **cuBLAS** (CUDA Basic Linear Algebra Subprograms), sfruttando routine implementate a livello assembly da NVIDIA.
-
-### Concetto Architetturale
-Richiamando la funzione `cublasSgemm`, il controllo passa a un codice altamente specializzato che adatta l'esecuzione all'hardware sottostante. A differenza dell'approccio manuale, cuBLAS è in grado di interrogare l'architettura a run-time, massimizzando l'occupazione dei multiprocessori e, se l'architettura lo consente, attivando i Tensor Cores per accelerare le operazioni matriciali.
-
-
-
-### Analisi del Profiling (`nvprof`)
-I log del profiler hanno evidenziato una trasformazione radicale:
-* **Tempo di esecuzione totale (Kernel):** $\approx 1.35$ secondi.
-* **Il Kernel `volta_sgemm_128x128_nn`:** cuBLAS ha automaticamente sostituito l'approccio generico invocando questo specifico kernel ottimizzato. La sigla indica l'utilizzo di una Tile logica enorme, di dimensioni **$128 \times 128$**. Mappare una Tile del genere a livello di codice C standard esaurirebbe rapidamente i registri disponibili, ma l'implementazione assembly di cuBLAS riesce a orchestrare il caricamento in cache L1, Shared Memory e file di registri in modo perfetto, azzerando i cicli di stallo (stall cycles) delle ALU.
-* **Occupazione Dinamica:** È stata rilevata la chiamata API `cudaOccupancyMaxActiveBlocksPerMultiprocessor`, confermando che cuBLAS calcola dinamicamente la dimensione ottimale della griglia per mantenere il 100% del silicio attivo.
+Inoltre, il codice Naive utilizza variabili `double` (FP64). Su architetture come la T4, le unità di calcolo a doppia precisione sono nettamente inferiori rispetto a quelle a singola precisione, penalizzando ulteriormente l'esecuzione pura.
 
 ---
 
-## 4. Analisi Comparativa: L'Impatto del "Memory Wall"
-
-Il confronto tra le due implementazioni evidenzia un cambio di paradigma nell'analisi dei colli di bottiglia.
-
-1.  **Accelerazione (Speedup):** Il passaggio da un Tiling manuale a cuBLAS ha prodotto uno speedup di **$\approx 5.4\times$**, innalzando le prestazioni effettive a circa 5 TeraFLOPS (mille miliardi di operazioni in virgola mobile al secondo).
-2.  **Costanza del Trasferimento Dati:** I tempi necessari per trasferire i dati via bus PCI-Express (`cudaMemcpy`) sono rimasti identici in entrambi i test (circa $600$ ms totali), essendo vincolati da limiti fisici hardware (banda passante della scheda madre e dimensione in byte delle matrici).
-3.  **Spostamento del Collo di Bottiglia:** Nel primo scenario, i $600$ ms di trasferimento rappresentavano una quota marginale rispetto ai $7.33$ secondi di elaborazione aritmetica. Nell'implementazione cuBLAS, a fronte di un tempo di calcolo di soli $1.35$ secondi, i medesimi $600$ ms sono giunti a pesare per quasi il **30% del tempo totale** di attività della GPU.
+## 2. Il Kernel Ottimizzato: Tiling e Thread Coarsening
 
 
 
-### Conclusioni
-Le ottimizzazioni hardware introdotte da cuBLAS (tile da 128x128, uso intensivo dei registri e istruzioni specifiche per l'architettura) hanno saturato completamente le unità aritmetiche della scheda. Di conseguenza, il sistema ha raggiunto il cosiddetto **Memory Wall**: l'algoritmo non è più limitato dalla capacità di calcolo (Compute-Bound), bensì dalla velocità con cui l'infrastruttura di interconnessione (PCIe) riesce a fornire i dati alla memoria della GPU (Bandwidth-Bound).
+Qui facciamo un salto di qualità architetturale, introducendo lo sfruttamento della **Memoria Condivisa (Shared Memory)**, una memoria on-chip velocissima progettata appositamente per la cooperazione tra thread di uno stesso blocco.
+
+### I Dati (Scalabilità)
+* **N = 5000:** 0.26 secondi
+* **N = 10000:** 1.69 secondi
+* **N = 15000:** 6.09 secondi
+* **N = 20000:** 14.49 secondi
+
+### Analisi dell'Ottimizzazione
+I tempi crollano drasticamente. A $N=20000$, passiamo da quasi 100 secondi a soli 14 secondi. Questo risultato è frutto di due tecniche combinate:
+
+1.  **Tiling (Memoria Condivisa):** Invece di leggere singole celle, i thread di un blocco si coordinano per caricare un'intera sottomatrice (Tile) nella Shared Memory. Una volta che il Tile è caricato, tutti i thread del blocco possono accedere a quei dati a velocità pari a quella della cache L1, riutilizzandoli più volte. Se il Tile è di dimensione $32 \times 32$, riduciamo gli accessi alla lenta Memoria Globale di un fattore 32. Il limite si sposta così dalla memoria ai core di calcolo (*Compute Bound*).
+2.  **Thread Coarsening:** Un singolo thread ora non calcola più un solo elemento, ma ben 4 elementi contemporaneamente (uso dei registri). Questo ci permette di caricare un valore di $A$ dalla Shared Memory in un registro ultrarapido, e moltiplicarlo per 4 valori diversi di $B$. Riduce ulteriormente il traffico, persino all'interno della Shared Memory.
+3.  **Precisione FP32:** L'utilizzo dei `float` dimezza i byte da muovere per ogni operazione e sblocca la massima potenza di calcolo parallelo della GPU T4.
+
+---
+
+## 3. cuBLAS: L'Ottimizzazione a Livello di Ferro
+
+Infine, abbiamo testato cuBLAS, la libreria fornita direttamente da NVIDIA.
+
+### I Dati (Scalabilità)
+* **N = 10000:** 0.40 secondi
+* **N = 15000:** 1.29 secondi
+* **N = 20000:** 3.11 secondi
+
+### Analisi dell'Esecuzione
+A $N=20000$, cuBLAS distrugge letteralmente il nostro (pur ottimo) kernel custom, girando quasi 5 volte più veloce (3.11s contro 14.49s). Cosa fa di speciale questa libreria?
+
+Non si limita ad applicare il Tiling. I kernel di cuBLAS sono scritti scendendo al livello del linguaggio Assembly (PTX/SASS), cuciti millimetricamente sulle specifiche architetturali della GPU ospite. 
+Dal profiler vediamo che usa un kernel chiamato `volta_sgemm_128x128_nn`. Questo significa che usa Tile mastodontici (128x128), ma la vera magia risiede nel modo in cui nasconde la latenza: utilizza tecniche di **Prefetching e Double Buffering**. Mentre i CUDA core sono impegnati a calcolare i dati del Tile attuale, i controller di memoria stanno già pre-caricando il Tile successivo nei registri, in modo che l'unità matematica non resti inattiva nemmeno per un ciclo di clock.
+
+---
+
+## Riepilogo Scalabilità
+
+La seguente tabella riassume l'efficienza in base alla dimensione del problema. Man mano che $N$ cresce, il divario si fa sempre più estremo:
+
+| Dimensione ($N$) | Naive (FP64) | Tiled + Coarsened (FP32) | cuBLAS (FP32) | Miglioramento (cuBLAS vs Naive) |
+| :--- | :--- | :--- | :--- | :--- |
+| **5.000** | 1.26 s | 0.26 s | N/A (Velocissimo) | ~ 5x (Stimato) |
+| **10.000** | 10.16 s | 1.69 s | 0.40 s | **~ 25x** |
+| **15.000** | 42.35 s | 6.09 s | 1.29 s | **~ 32x** |
+| **20.000** | 97.81 s | 14.49 s | 3.11 s | **~ 31x** |
+
+**Conclusione:** Per matrici di dimensioni limitate ($N < 1000$), un kernel naive potrebbe persino sembrare accettabile perché la memoria cache della GPU riesce a mascherare un po' di inefficienza. Ma appena scaliamo verso problemi reali del mondo Big Data o Deep Learning ($N=20000$), la mancata ottimizzazione della Memoria Globale porta a tempi di esecuzione inaccettabili. L'uso della Shared Memory e del Tiling è obbligatorio, mentre per le applicazioni in produzione, affidarsi a librerie ultra-ottimizzate come cuBLAS è la scelta standard.
