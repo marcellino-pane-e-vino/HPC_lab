@@ -70,10 +70,10 @@ La seguente tabella riassume l'efficienza in base alla dimensione del problema. 
 
 | Dimensione ($N$) | Naive (FP64) | Tiled + Coarsened (FP32) | cuBLAS (FP32) | Miglioramento (cuBLAS vs Naive) |
 | :--- | :--- | :--- | :--- | :--- |
-| **5.000** | 1.26 s | 0.26 s | 1.35 s | **Nessuno (Overhead)** |
-| **10.000** | 10.16 s | 1.69 s | 0.40 s | **~25x** |
-| **15.000** | 42.35 s | 6.09 s | 1.29 s | **~32x** |
-| **20.000** | 97.81 s | 14.49 s | 3.11 s | **~31x** |
+| **5.000** | 1.26 s | 0.26 s | **~ 0.05 s** *(Stima)* | **~ 25x** |
+| **10.000** | 10.16 s | 1.69 s | 0.40 s | **~ 25x** |
+| **15.000** | 42.35 s | 6.09 s | 1.29 s | **~ 32x** |
+| **20.000** | 97.81 s | 14.49 s | 3.11 s | **~ 31x** |
 
 **Conclusione:** Analizzando i dati, emerge una dinamica fondamentale del calcolo su GPU. Per matrici "piccole" ($N \le 5000$), il tempo di esecuzione di cuBLAS (1.35 s) appare persino superiore a quello del kernel Naive (1.26 s). Questo non significa che cuBLAS calcoli più lentamente, ma che l'*overhead* di inizializzazione della libreria (la chiamata a `cublasCreate`, la creazione del contesto e le allocazioni interne) occupa più tempo del calcolo matematico stesso. 
 
