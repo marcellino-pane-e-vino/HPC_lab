@@ -1,9 +1,0 @@
-program,size,threads,compiler,flagset,mean_runtime
-"('matrixmult_opt_final_restrict.c', 'sequential')",1000,None,icx,"['OPT_O3', 'CPU_NATIVE']",0.182
-"('matrixmult_opt_final_restrict.c', 'sequential')",5000,None,icx,"['OPT_O3', 'CPU_NATIVE']",5.7257
-"('matrixmult_opt_final_restrict.c', 'sequential')",8000,None,icx,"['OPT_O3', 'CPU_NATIVE']",22.6916
-"('matrixmult_opt_final_restrict.c', 'sequential')",10000,None,icx,"['OPT_O3', 'CPU_NATIVE']",44.0495
-"('matrixmult_opt_final.c', 'sequential')",1000,None,icx,"['OPT_O3', 'CPU_NATIVE']",0.1804
-"('matrixmult_opt_final.c', 'sequential')",5000,None,icx,"['OPT_O3', 'CPU_NATIVE']",5.7175
-"('matrixmult_opt_final.c', 'sequential')",8000,None,icx,"['OPT_O3', 'CPU_NATIVE']",22.6791
-"('matrixmult_opt_final.c', 'sequential')",10000,None,icx,"['OPT_O3', 'CPU_NATIVE']",44.1481
