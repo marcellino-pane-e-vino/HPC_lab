@@ -1,0 +1,23 @@
+program,size,threads,compiler,flagset,mean_runtime
+"('omp_ikj_dynamic_4.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",21.8922053333333
+"('omp_ikj_guided_4.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",22.2001896666667
+"('omp_ikj_dynamic_8.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",22.3907683333333
+"('omp_ikj_guided_8.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",22.360611
+"('omp_ikj_dynamic_16.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",22.5475343333333
+"('omp_ikj_guided_16.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",22.3273263333333
+"('omp_ikj_dynamic_32.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",22.468358
+"('omp_ikj_guided_32.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",22.4392273333333
+"('omp_ikj_dynamic_64.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",22.7273006666667
+"('omp_ikj_guided_64.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",22.6942236666667
+"('omp_ikj_dynamic_128.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",23.51444
+"('omp_ikj_guided_128.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",23.1013546666667
+"('omp_ikj_dynamic_256.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",23.858199
+"('omp_ikj_guided_256.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",24.0040046666667
+"('omp_ikj_dynamic_4.c', 'openmp')",20000,24,icx,"['OPT_O3', 'CPU_NATIVE']",53.156839
+"('omp_ikj_guided_4.c', 'openmp')",20000,24,icx,"['OPT_O3', 'CPU_NATIVE']",53.4582373333333
+"('omp_ikj_guided_8.c', 'openmp')",20000,24,icx,"['OPT_O3', 'CPU_NATIVE']",53.5230596666667
+"('omp_ikj_dynamic_8.c', 'openmp')",20000,24,icx,"['OPT_O3', 'CPU_NATIVE']",53.6677613333333
+"('omp_ikj_dynamic_16.c', 'openmp')",20000,24,icx,"['OPT_O3', 'CPU_NATIVE']",53.7324586666667
+"('omp_ikj_guided_32.c', 'openmp')",20000,24,icx,"['OPT_O3', 'CPU_NATIVE']",53.7474703333333
+"('omp_ikj_guided_16.c', 'openmp')",20000,24,icx,"['OPT_O3', 'CPU_NATIVE']",54.017729
+"('omp_ikj_dynamic_32.c', 'openmp')",20000,24,icx,"['OPT_O3', 'CPU_NATIVE']",54.2078096666667
