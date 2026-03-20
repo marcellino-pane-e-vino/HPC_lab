@@ -1,0 +1,286 @@
+0. Punto di partenza — naive MPI
+
+Caratteristiche:
+
+* partizione 1D (per righe)
+
+* MPI_Bcast di tutta B
+
+* ogni processo ha:
+
+  A: solo righe
+  B: tutta
+  C: solo righe
+
+* comunicazione: O(n²)
+
+Semplice, ma non scalabile.
+
+---
+
+1. Separazione concettuale: dati locali vs globali
+
+Modifica:
+
+* Introduci distinzione chiara tra matrici globali e locali
+
+Perché:
+
+* Nel naive:
+
+  double *b = malloc(n*n);  // globale o locale?
+
+* Nel SUMMA-like:
+
+  matrix_A / local_A
+
+Effetto:
+
+* Base mentale per tutto il resto
+* Nessun miglioramento prestazionale ancora
+
+---
+
+2. Da 1D → 2D process grid
+
+Modifica:
+
+* q = sqrt(size)
+* row = rank / q
+* col = rank % q
+
+Perché:
+
+* Passi da processi in linea a processi in griglia
+
+Effetto:
+
+| Prima                    | Dopo      |
+| ------------------------ | --------- |
+| 1D                       | 2D        |
+| Squilibrio comunicazione | Simmetria |
+
+Fondamentale per scalabilità.
+
+---
+
+3. Da righe → blocchi (data distribution)
+
+Modifica:
+
+* block_size = n / q
+* Introduci blocchi quadrati
+
+Prima:
+
+* A → righe
+* B → tutta
+
+Dopo:
+
+* A → blocco
+* B → blocco
+* C → blocco
+
+Effetto:
+
+* Memoria per processo: O(n²) → O(n² / P)
+* Primo vero salto di qualità
+
+---
+
+4. Scatter 2D “vero”
+
+Modifica:
+
+* Sostituisci MPI_Scatter con MPI_Type_create_subarray + MPI_Scatterv
+
+Perché:
+
+* Prima: dati contigui (righe)
+* Ora: sottomatrici (non contigue)
+
+Effetto:
+
+* Meno messaggi
+* Distribuzione corretta
+* Codice generalizzabile
+
+---
+
+5. Eliminazione del broadcast globale di B
+
+Modifica:
+
+* Mai più inviare tutta B a tutti
+
+Perché:
+
+* È il collo di bottiglia principale del naive
+
+Effetto:
+
+* Comunicazione: O(n²) → O(n² / √P)
+* Cuore di SUMMA
+
+---
+
+6. Introduzione degli step (loop k distribuito)
+
+Modifica:
+
+* for step_k = 0 to q-1
+
+Perché:
+
+* Prima: usi tutta B subito
+* Ora: usi blocchi progressivamente
+
+Effetto:
+
+* Decomposizione del lavoro
+* Comunicazione distribuita nel tempo
+
+---
+
+7. Comunicazione locale (row/column communicators)
+
+Modifica:
+
+* MPI_Comm_split → row_communicator
+* MPI_Comm_split → col_communicator
+
+Prima: tutti parlano con tutti
+Dopo: solo riga o colonna
+
+Effetto:
+
+* Meno congestione
+* Migliore locality
+
+---
+
+8. Broadcast selettivo (panel broadcast)
+
+Modifica:
+
+* MPI_Bcast(A_panel, ..., row_comm)
+* MPI_Bcast(B_panel, ..., col_comm)
+
+Idea:
+
+* Ogni iterazione: 1 blocco A → riga, 1 blocco B → colonna
+
+Effetto:
+
+* Comunicazione minima necessaria
+* Pattern regolare
+* SUMMA puro
+
+---
+
+9. Buffer temporanei (panel)
+
+Modifica:
+
+* A_broadcast_block
+* B_broadcast_block
+
+Perché:
+
+* Separi dati locali dai dati ricevuti
+
+Effetto:
+
+* Codice più pulito
+* Possibilità di overlap futuro
+
+---
+
+10. Da naive compute → compute a blocchi (tiling)
+
+Modifica:
+
+* Loop annidati su tile_i, tile_k, tile_j
+
+Prima: accessi cache pessimi
+Dopo: riuso dati in cache
+
+Effetto:
+
+* Enorme speedup CPU
+* Meno memory bandwidth
+
+---
+
+11. Loop reorder + register reuse
+
+Modifica:
+
+* double a_val = ...
+
+Effetto:
+
+* Meno accessi memoria
+* Migliore uso CPU pipeline
+
+---
+
+12. Gather 2D coerente
+
+Modifica:
+
+* MPI_Gatherv(..., resized_block_type)
+
+Prima: gather lineare
+Dopo: ricostruzione 2D
+
+---
+
+Vista finale (la trasformazione)
+
+Naive:
+
+* 1D partition
+* Broadcast globale
+* Compute semplice
+
+SUMMA-like:
+
+* 2D process grid
+* Distribuzione a blocchi
+* Comunicazione locale (row/col)
+* Algoritmo iterativo (k steps)
+* Tiling cache
+
+---
+
+TL;DR (la vera “nave di Teseo”)
+
+Se togli tutte le modifiche una per una:
+
+1. Togli tiling → perdi performance CPU
+2. Togli panel broadcast → torni a broadcast globale
+3. Togli communicator → perdi locality
+4. Togli 2D grid → torni a 1D
+5. Togli block distribution → torni a replicare B
+
+Alla fine torni ESATTAMENTE al naive.
+
+---
+
+Insight finale
+
+SUMMA non è “un algoritmo completamente diverso”
+ma: il naive + tutte le ottimizzazioni necessarie per farlo scalare.
+
+---
+
+Se vuoi, prossimo step interessante:
+
+* Quanto ogni singolo step migliora (speedup teorico + pratico)
+* Versione con overlap comunicazione/calcolo (livello HPC vero)
+
+---
+
+Se vuoi, posso anche fare una **versione ancora più sintetica “passo-per-passo” adatta a stampa o appunti** che sta tutta in 1 pagina. Vuoi che lo faccia?
