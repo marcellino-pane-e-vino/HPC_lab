@@ -26,19 +26,9 @@ PARAMETERS = {
         #("matrixmult_opt.c", "sequential"),
     
     # ---- OpenMP zone ----
-        ("omp_matrixmult_naive_static.c", "openmp"),
-        ("omp_matrixmult_naive_dynamic.c", "openmp"),
-        ("omp_matrixmult_naive_guided.c", "openmp"),
-        
+        #("omp_matrixmult_naive.c", "openmp"),
         #("omp_matrixmult_library.c", "openmp"),
-        
-        ("omp_matrixmult_opt_static.c", "openmp"),
-        ("omp_matrixmult_opt_dynamic.c", "openmp"),
-        ("omp_matrixmult_opt_guided.c", "openmp"),
-
-        ("omp_notrasp_static.c", "openmp"),
-        ("omp_notrasp_dynamic.c", "openmp"),
-        ("omp_notrasp_guided.c", "openmp")
+        ("omp_matrixmult_opt.c", "openmp"),
     ],
     "size": [8000,10000,15000,20000],
     "threads": [24],  # Use None for sequential, use integers [1, 2, 4] for OpenMP
