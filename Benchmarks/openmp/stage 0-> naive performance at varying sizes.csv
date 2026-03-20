@@ -1,5 +1,0 @@
-program,size,threads,compiler,flagset,mean_runtime
-"('omp_matrixmult_naive.c', 'openmp')",8000,24,icx,"['OPT_O3', 'CPU_NATIVE']",10.671377666666666
-"('omp_matrixmult_naive.c', 'openmp')",10000,24,icx,"['OPT_O3', 'CPU_NATIVE']",20.94893433333333
-"('omp_matrixmult_naive.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",73.37835299999999
-"('omp_matrixmult_naive.c', 'openmp')",20000,24,icx,"['OPT_O3', 'CPU_NATIVE']",174.05409033333333
