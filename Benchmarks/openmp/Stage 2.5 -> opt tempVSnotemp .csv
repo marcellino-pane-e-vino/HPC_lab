@@ -1,0 +1,9 @@
+program,size,threads,compiler,flagset,mean_runtime
+"('omp_matrixmult_opt.c', 'openmp')",8000,24,icx,"['OPT_O3', 'CPU_NATIVE']",3.325122
+"('omp_matrixmult_opt_NOTEMP.c', 'openmp')",8000,24,icx,"['OPT_O3', 'CPU_NATIVE']",3.443772
+"('omp_matrixmult_opt.c', 'openmp')",10000,24,icx,"['OPT_O3', 'CPU_NATIVE']",6.54976366666667
+"('omp_matrixmult_opt_NOTEMP.c', 'openmp')",10000,24,icx,"['OPT_O3', 'CPU_NATIVE']",6.74526833333333
+"('omp_matrixmult_opt.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",22.08334
+"('omp_matrixmult_opt_NOTEMP.c', 'openmp')",15000,24,icx,"['OPT_O3', 'CPU_NATIVE']",22.5273573333333
+"('omp_matrixmult_opt_NOTEMP.c', 'openmp')",20000,24,icx,"['OPT_O3', 'CPU_NATIVE']",53.921554
+"('omp_matrixmult_opt.c', 'openmp')",20000,24,icx,"['OPT_O3', 'CPU_NATIVE']",53.9279246666667
