@@ -28,76 +28,70 @@ echo "--------------------------------------------------"
 
 # 1. Check if it's already installed
 if [ -x "${INSTALL_DIR}/bin/mpicc" ]; then
-    echo "INFO: MPICH is already installed at ${INSTALL_DIR}."
+    echo "STEP 1: MPICH is already installed. Skipping build."
 else
-    # 2. Setup build environment
-    echo "Creating build environment in ${SRC_DIR}..."
+    echo "STEP 1: Installing MPICH (this happens only once)..."
     mkdir -p "${SRC_DIR}"
     cd "${SRC_DIR}"
 
-    # 3. Download the source code
-    if [ ! -f "${TAR_FILE}" ]; then
-        echo "Downloading MPICH source from ${DOWNLOAD_URL}..."
-        wget -q --show-progress "${DOWNLOAD_URL}"
-    fi
+    echo "  -> Downloading source..."
+    wget -q --show-progress "${DOWNLOAD_URL}"
 
-    # 4. Extract
-    echo "Extracting archive..."
+    echo "  -> Extracting..."
     tar -xzf "${TAR_FILE}"
     cd "mpich-${MPICH_VERSION}"
 
-    # 5. Configure the build (Device ch3 for maximum compatibility)
-    echo "Configuring build (this may take a minute)..."
-    ./configure \
-        --prefix="${INSTALL_DIR}" \
-        --disable-fortran \
-        --with-device=ch3 \
-        > configure.log 2>&1 || { echo "ERROR: Configuration failed."; exit 1; }
+    echo "  -> Configuring (CH3 device for compatibility)..."
+    ./configure --prefix="${INSTALL_DIR}" --disable-fortran --with-device=ch3 > configure.log 2>&1
 
-    # 6. Compile
-    echo "Compiling (using $(nproc) parallel threads)..."
-    make -j"$(nproc)" > make.log 2>&1 || { echo "ERROR: Compilation failed."; exit 1; }
+    echo "  -> Compiling (using $(nproc) threads)..."
+    make -j"$(nproc)" > make.log 2>&1
 
-    # 7. Install to local directory
-    echo "Installing to ${INSTALL_DIR}..."
-    make install > install.log 2>&1 || { echo "ERROR: Installation failed."; exit 1; }
-
-    # 8. Cleanup
-    echo "Cleaning up temporary files..."
+    echo "  -> Installing..."
+    make install > install.log 2>&1
+    
     cd /tmp
     rm -rf "${SRC_DIR}"
 fi
 
-# 9. Automate Alias and PATH configuration in .bashrc
-# We use aliases to explicitly bypass the broken system wrappers in /usr/bin/
-MPICC_ALIAS="alias mpicc='${INSTALL_DIR}/bin/mpicc'"
-MPIRUN_ALIAS="alias mpirun='${INSTALL_DIR}/bin/mpirun'"
-PATH_EXPORT="export PATH=\"${INSTALL_DIR}/bin:\$PATH\""
+# 2. Update .bashrc for FUTURE sessions (making it permanent)
+echo "STEP 2: Hard-coding configuration into ${BASHRC_FILE}..."
 
-echo "Updating environment configuration..."
+# Remove any old auto-installer lines to avoid clutter
+sed -i '/# Added by MPICH auto-installer/d' "$BASHRC_FILE" || true
+sed -i "/mpich-${MPICH_VERSION}/d" "$BASHRC_FILE" || true
 
-# Function to add line if not present
-add_to_bashrc() {
-    local line="$1"
-    if ! grep -qF "$line" "$BASHRC_FILE"; then
-        echo "$line" >> "$BASHRC_FILE"
-    fi
-}
+# Append fresh configuration to the end of .bashrc
+{
+    echo ""
+    echo "# Added by MPICH auto-installer"
+    echo "export PATH=\"${INSTALL_DIR}/bin:\$PATH\""
+    echo "alias mpicc='${INSTALL_DIR}/bin/mpicc'"
+    echo "alias mpirun='${INSTALL_DIR}/bin/mpirun'"
+} >> "$BASHRC_FILE"
 
-echo "" >> "$BASHRC_FILE"
-echo "# Added by MPICH auto-installer" >> "$BASHRC_FILE"
-add_to_bashrc "$PATH_EXPORT"
-add_to_bashrc "$MPICC_ALIAS"
-add_to_bashrc "$MPIRUN_ALIAS"
+# 3. Create a temporary "Force-Environment" file for the IMMEDIATE shell
+echo "STEP 3: Preparing the immediate environment shell..."
+TEMP_RC=$(mktemp)
+{
+    echo "source ~/.bashrc"
+    echo "export PATH=\"${INSTALL_DIR}/bin:\$PATH\""
+    echo "alias mpicc='${INSTALL_DIR}/bin/mpicc'"
+    echo "alias mpirun='${INSTALL_DIR}/bin/mpirun'"
+    echo "cd \"$CURRENT_DIR\""
+    echo "echo '--------------------------------------------------'"
+    echo "echo 'SUCCESS: New environment loaded!'"
+    echo "echo \"Current mpicc: \$(which mpicc)\""
+    echo "echo 'You can now run: mpicc matrixmult_mpi_naive.c -o test'"
+    echo "echo '--------------------------------------------------'"
+    echo "rm \"$TEMP_RC\"" # The shell file deletes itself after loading
+} > "$TEMP_RC"
 
 echo "--------------------------------------------------"
-echo "SUCCESS: MPICH is ready."
-echo "ACTION: Killing current shell and launching a new one..."
-echo "ACTION: Navigating back to: $CURRENT_DIR"
-echo "ACTION: Command history for this session will be reset."
+echo "COMPLETED: Suicide protocol initiated."
+echo "Killing old shell and dropping you into the functional one..."
 echo "--------------------------------------------------"
 
-# 10. The "Suicide" and Refresh
-# We use 'exec' to replace the current process. 
-# We call 'bash' with a command to first cd back, then remain interactive.
-exec bash --init-file <(echo "source $BASHRC_FILE; cd '$CURRENT_DIR'")
+# 4. The "Suicide" and Refresh
+# Launch bash using our bulletproof temporary RC file
+exec bash --rcfile "$TEMP_RC"
