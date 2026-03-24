@@ -1,4 +1,4 @@
-# I_MPI_FABRICS=shm mpirun -np (NUMERO DI PROCESSI) ./matrixmult_mpi N
+//# I_MPI_FABRICS=shm mpirun -np (NUMERO DI PROCESSI) ./matrixmult_mpi N
 
 #include <stdio.h>
 #include <stdlib.h>

@@ -56,10 +56,7 @@ int main(int argc, char **argv) {
 
     MPI_Type_create_subarray(2, global_sizes, local_sizes, start_indices,
                              MPI_ORDER_C, MPI_DOUBLE, &block_type);
-
-    MPI_Type_create_resized(block_type, 0,
-                            local_block_size * sizeof(double),
-                            &resized_block_type);
+    MPI_Type_create_resized(block_type, 0, sizeof(double), &resized_block_type);
     MPI_Type_commit(&resized_block_type);
 
     int *send_counts = NULL;
