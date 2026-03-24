@@ -1,79 +1,126 @@
 #!/bin/bash
-source /opt/intel/oneapi/setvars.sh
 
-# Enforce strict error handling
+source /opt/intel/oneapi/setvars.sh > /dev/null 2>&1
+
 set -euo pipefail
 
 # ==========================================
 # CONFIGURATION
 # ==========================================
-# Sources to benchmark
-SOURCES=("matrixmult_mpi_naive.c" "matrixmult_mpi_summa.c")
+#SOURCES=("matrixmult_mpi_naive.c" "matrixmult_mpi_scalapack.c" "matrixmult_mpi_library.c")
+SOURCES=("matrixmult_mpi_scalapack.c" "matrixmult_mpi_library.c")
 
-# Compilers and Flags to test (you can add more to compare)
-# Comparison example: """COMPILER_FLAGS=("-O2 -lm" "-O3 -lm")"""
-COMPILER_FLAGS=("-O3 -lm")
+COMPILER_FLAGS=("-O3")
 
-# Execution settings
-NUM_PROCS=4         # Must be a perfect square for SUMMA
-MATRIX_SIZE=1024
+NUM_PROCS=4
+MATRIX_SIZE=10000
 CSV_OUTPUT="benchmark_results.csv"
 
-# Local MPICH paths
-MPICC_BIN="${HOME}/.local/mpich-4.3.0/bin/mpicc"
-MPIRUN_BIN="${HOME}/.local/mpich-4.3.0/bin/mpirun"
+MPICC_BIN="mpicc"
+MPIRUN_BIN="mpirun"
+
+# Track failures
+ANY_FAILURE=0
 
 # ==========================================
-# INITIALIZATION
+# CHECKS
 # ==========================================
 
-# Create CSV header if it doesn't exist
+if ! command -v $MPICC_BIN &> /dev/null; then
+    echo "ERROR: mpicc not found."
+    exit 1
+fi
+
+if [ -z "${MKLROOT:-}" ]; then
+    echo "ERROR: MKL not available."
+    exit 1
+fi
+
+# ==========================================
+# INIT
+# ==========================================
+
 if [ ! -f "$CSV_OUTPUT" ]; then
     echo "Source,Flags,MatrixSize,Procs,Time_Seconds" > "$CSV_OUTPUT"
 fi
 
 echo "--------------------------------------------------"
 echo " Starting Multi-Source HPC Benchmark"
-echo "Config: $NUM_PROCS processes, $MATRIX_SIZE matrix size"
 echo "--------------------------------------------------"
+
+# ==========================================
+# MAIN LOOP
+# ==========================================
 
 for SRC in "${SOURCES[@]}"; do
     for FLAGS in "${COMPILER_FLAGS[@]}"; do
+
         OUT_BIN="${SRC%.c}.out"
-        
-        echo ">>> CURRENT TASK: $SRC with flags [$FLAGS]"
-        
-        # 1. Compilation
+
+        echo ">>> CURRENT TASK: $SRC"
         echo "    [STEP 1/2] Compiling..."
-        if ! $MPICC_BIN "$SRC" -o "$OUT_BIN" $FLAGS; then
-            echo "    ERROR: Compilation failed for $SRC"
-            continue
+
+        if [[ "$SRC" == "matrixmult_mpi_library.c" ]]; then
+            echo "    Using ScaLAPACK (MKL manual linking)"
+
+            if ! $MPICC_BIN "$SRC" -o "$OUT_BIN" $FLAGS \
+                -I${MKLROOT}/include \
+                -L${MKLROOT}/lib/intel64 \
+                -lmkl_scalapack_lp64 \
+                -lmkl_blacs_intelmpi_lp64 \
+                -lmkl_intel_lp64 \
+                -lmkl_core \
+                -lmkl_sequential \
+                -lpthread -lm -ldl; then
+
+                echo "    ERROR: Compilation failed (ScaLAPACK)"
+                ANY_FAILURE=1
+                continue
+            fi
+
+        else
+            if ! $MPICC_BIN "$SRC" -o "$OUT_BIN" $FLAGS -lm; then
+                echo "    ERROR: Compilation failed"
+                ANY_FAILURE=1
+                continue
+            fi
         fi
 
-        # 2. Execution
-        echo "    [STEP 2/2] Executing benchmark..."
-        
-        # Execute and capture only the output line containing timing info
+        echo "    [STEP 2/2] Executing..."
+
         set +e
         EXEC_OUT=$($MPIRUN_BIN -np "$NUM_PROCS" "./$OUT_BIN" "$MATRIX_SIZE" 2>&1)
         RUN_STATUS=$?
         set -e
 
         if [ $RUN_STATUS -eq 0 ]; then
-            # Extract time using regex (works for both "Tempo Totale" and "time=...")
             TIME_VAL=$(echo "$EXEC_OUT" | grep -Ei "time|tempo" | grep -Eo '[0-9]+\.[0-9]+' | tail -1)
-            
-            echo "    SUCCESS: Execution time: ${TIME_VAL}s"
-            # Write to CSV
+
+            if [ -z "$TIME_VAL" ]; then
+                TIME_VAL="NaN"
+            fi
+
+            echo "    SUCCESS: ${TIME_VAL}s"
             echo "$SRC,\"$FLAGS\",$MATRIX_SIZE,$NUM_PROCS,$TIME_VAL" >> "$CSV_OUTPUT"
+
         else
             echo "    ERROR: Runtime crash (Exit Code $RUN_STATUS)"
-            echo "    Check if NUM_PROCS is a perfect square for SUMMA."
+            echo "$EXEC_OUT"
+            ANY_FAILURE=1
         fi
-        
+
         echo "--------------------------------------------------"
     done
 done
 
-echo " All tasks complete. Results saved in: $CSV_OUTPUT"
-echo "You can view them with: column -s, -t $CSV_OUTPUT"
+# ==========================================
+# FINAL STATUS
+# ==========================================
+
+if [ "$ANY_FAILURE" -eq 0 ]; then
+    echo " All tasks completed successfully."
+else
+    echo " Completed with ERRORS. Check logs above."
+fi
+
+echo " Results: $CSV_OUTPUT"
