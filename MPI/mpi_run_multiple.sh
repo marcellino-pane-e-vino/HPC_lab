@@ -74,5 +74,5 @@ for SRC in "${SOURCES[@]}"; do
     done
 done
 
-echo "🏁 All tasks complete. Results saved in: $CSV_OUTPUT"
+echo " All tasks complete. Results saved in: $CSV_OUTPUT"
 echo "You can view them with: column -s, -t $CSV_OUTPUT"
