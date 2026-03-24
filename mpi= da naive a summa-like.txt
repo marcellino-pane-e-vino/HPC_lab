@@ -1,0 +1,85 @@
+Questa è una bellissima sfida. Passare dal codice **Naive** a quello **SUMMA + Tiling** non è solo un cambio di righe di codice, è un cambio totale di paradigma: da "faccio quello che posso con quello che ho" a "ottimizzo ogni singolo ciclo di clock e ogni byte spostato".
+
+Andiamo per gradi, esplorando ogni innovazione come se fossimo in un cantiere di ingegneria del software.
+
+---
+
+## 1. Dalla riga al blocco: La Decomposizione 2D
+Nel codice **Naive**, usavi una decomposizione **1D (per righe)**. Ogni processo riceveva $N/P$ righe intere.
+* **Problema:** Se hai tanti processi, le righe diventano "sottili". Inoltre, ogni processo deve avere in memoria **tutta** la matrice B ($N \times N$). Se $N=10.000$, B occupa 800MB; con 1000 processi, stai sprecando una quantità di RAM enorme.
+
+**L'innovazione nel SUMMA:** Usiamo una **Griglia 2D**. Dividiamo i processi in una scacchiera $\sqrt{P} \times \sqrt{P}$. Ogni processo possiede solo un **sotto-blocco** quadrato di A, di B e di C.
+* **Vantaggio:** La memoria locale scala molto meglio. Nessuno ha più bisogno dell'intera matrice B dall'inizio.
+
+
+
+---
+
+## 2. Il "trasloco" complesso: MPI_Type_create_subarray
+Qui entriamo nel tecnico. In C, una matrice 2D in memoria è in realtà un unico lungo nastro (1D). Estrarre un "quadratino" da un nastro è difficile perché i dati non sono contigui (fita una riga del quadratino, devi saltare un pezzo di nastro per trovare la riga successiva).
+
+**L'innovazione:** Invece di fare mille `malloc` e cicli manuali, usiamo i **Tipi di Dato Derivati**.
+* **`MPI_Type_create_subarray`**: Dice a MPI "Guarda, la matrice globale è $N \times N$, ma io voglio che tu ne prenda un pezzetto $n_{loc} \times n_{loc}$ partendo dalle coordinate $(x,y)$".
+* **`MPI_Type_create_resized`**: Come abbiamo scoperto prima, questo serve a resettare l'unità di misura del "salto" (extent). Senza questo, `MPI_Scatterv` non saprebbe dove finisce un blocco e dove inizia l'altro nel nastro di memoria.
+
+Questo permette a `MPI_Scatterv` di distribuire i blocchi 2D a tutti i processi in un colpo solo, direttamente dalla matrice 1D del Rank 0.
+
+---
+
+## 3. Dividi e Impera: MPI_Comm_split
+Nel codice Naive, tutti parlavano con tutti via `MPI_COMM_WORLD`.
+Nel SUMMA, abbiamo bisogno di comunicazioni mirate: un processo deve poter urlare qualcosa solo ai suoi compagni di **riga** o di **colonna**.
+
+**L'innovazione:** **`MPI_Comm_split`**.
+Immagina di essere in una classe e dire: "Tutti quelli nella prima fila formino un gruppo, quelli nella seconda un altro".
+* Creiamo `row_communicator`: serve per il Broadcast orizzontale di A.
+* Creiamo `col_communicator`: serve per il Broadcast verticale di B.
+Questo rende le comunicazioni molto più veloci perché coinvolgono solo $\sqrt{P}$ processi invece di $P$.
+
+---
+
+## 4. L'algoritmo SUMMA: Il Broadcast a passi
+Nel codice Naive, facevi un enorme `MPI_Bcast` della matrice B.
+**SUMMA** (Scalable Universal Matrix Multiplication Algorithm) è più intelligente. Funziona a passi ($step_k$):
+
+1.  A ogni passo $k$, un processo "proprietario" nella colonna $k$ invia il suo pezzetto di A a tutta la sua riga.
+2.  Parallelamente, un processo "proprietario" nella riga $k$ invia il suo pezzetto di B a tutta la sua colonna.
+3.  Tutti quelli che hanno ricevuto questi "pezzi volanti" li moltiplicano e accumulano il risultato nel loro `local_C`.
+
+**Perché è meglio?** Non sposti mai tutta la matrice insieme. Sposti solo piccoli pezzi in parallelo, saturando meno la rete del cluster.
+
+---
+
+## 5. Local Optimization: Tiling (Cache Blocking)
+Una volta che i dati sono arrivati nel processo, dobbiamo fare il calcolo. Il codice Naive usava:
+$$C_{ij} = \sum A_{ik} \times B_{kj}$$
+Con tre cicli `for` semplici.
+
+**Il problema della CPU:** La CPU è velocissima, ma la RAM è lenta. Se i dati della matrice sono troppi per stare nella **Cache L1/L2**, la CPU passa il 90% del tempo ad aspettare che i dati arrivino dalla RAM (*Cache Miss*).
+
+**L'innovazione: Il Tiling.**
+Invece di moltiplicare intere righe e colonne, dividiamo il lavoro locale in **Tile** (piastrelle) minuscole (es. $32 \times 32$).
+```c
+for (int tile_i = 0; ... )
+  for (int tile_k = 0; ... )
+    for (int tile_j = 0; ... )
+      // Calcolo sul quadratino che sta tutto in Cache!
+```
+Lavorando su un quadratino alla volta, i dati rimangono nei registri della CPU o nella Cache velocissima. La CPU non "muore di fame" aspettando la RAM e il calcolo vola.
+
+
+
+---
+
+## Riassunto del viaggio
+| Caratteristica | Naive | SUMMA + Tiling |
+| :--- | :--- | :--- |
+| **Topologia** | Lineare (1D) | Griglia (2D) |
+| **Memoria** | Spreco elevato (B è ovunque) | Ottimizzata (solo sotto-blocchi) |
+| **Comunicazione** | Collettiva globale (pesante) | Collettiva per gruppi (leggera) |
+| **Calcolo** | Standard $O(n^3)$ | Cache-friendly (Tiling) |
+| **Flessibilità** | Qualsiasi $P$ | Solo Quadrati Perfetti (per semplicità) |
+
+In pratica, sei passato da un furgone che consegna tutto in un unico viaggio caotico a una flotta di droni coordinati che consegnano piccoli pacchi sincronizzati.
+
+**Vuoi che approfondiamo la parte matematica del Tiling o preferisci vedere come scalare questo codice su un numero ancora maggiore di processi?**
