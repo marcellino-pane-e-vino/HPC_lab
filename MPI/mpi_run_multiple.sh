@@ -1,4 +1,5 @@
 #!/bin/bash
+source /opt/intel/oneapi/setvars.sh
 
 # Enforce strict error handling
 set -euo pipefail
