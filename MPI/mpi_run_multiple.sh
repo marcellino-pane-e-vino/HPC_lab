@@ -7,16 +7,17 @@ set -euo pipefail
 # ==========================================
 # CONFIGURATION
 # ==========================================
-#SOURCES=("matrixmult_mpi_naive.c" "matrixmult_mpi_scalapack.c" "matrixmult_mpi_library.c")
-SOURCES=("matrixmult_mpi_scalapack.c" "matrixmult_mpi_library.c")
+SOURCES=("matrixmult_mpi_naive.c") 
+#"matrixmult_mpi_scalapack.c" "matrixmult_mpi_library.c")
+#SOURCES=("matrixmult_mpi_scalapack.c" "matrixmult_mpi_library.c")
 
-COMPILER_FLAGS=("-O3")
+COMPILER_FLAGS=("-O3 -xHost")
 
-NUM_PROCS=4
-MATRIX_SIZE=10000
+NUM_PROCS=16
+MATRIX_SIZE=18000
 CSV_OUTPUT="benchmark_results.csv"
 
-MPICC_BIN="mpicc"
+MPICC_BIN="mpiicc"
 MPIRUN_BIN="mpirun"
 
 # Track failures
