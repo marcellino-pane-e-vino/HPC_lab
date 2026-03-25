@@ -2,7 +2,6 @@ Source,Flags,MatrixSize,Procs,Time_Seconds
 matrixmult_mpi_naive.c,-O3 -xHost,20000,8,265.050396
 matrixmult_mpi_naive.c,-O3 -xHost,15000,8,112.905552
 matrixmult_mpi_naive.c,-O3 -xHost,10000,8,33.357306
-matrixmult_mpi_naive.c,-O3 -xHost,10000,8,33.483739
 matrixmult_mpi_naive.c,-O3 -xHost,8000,8,17.086118
 matrixmult_mpi_naive.c,-O3 -xHost,5000,8,4.175921
 matrixmult_mpi_naive.c,-O3 -xHost,3000,8,0.927168
