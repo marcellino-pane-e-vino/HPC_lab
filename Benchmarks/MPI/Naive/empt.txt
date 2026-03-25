@@ -1,1 +1,39 @@
+Il motivo per cui il tuo programma crasha con 24 processi ma funziona perfettamente con 16 non è legato a un bug nel codice o a un errore di divisibilità (18000 è perfettamente divisibile sia per 16 che per 24), ma a un limite fisico della macchina: **stai esaurendo la memoria RAM del nodo (Out of Memory)**.
 
+Ecco la "matematica" di quello che succede dietro le quinte.
+
+### Il calcolo della memoria
+Stai lavorando con matrici di dimensione $18000 \times 18000$.
+* Totale elementi per matrice: $18.000 \times 18.000 = 324.000.000$
+* Dato che usi il tipo `double` (8 byte per elemento), ogni matrice intera occupa circa **2.59 GB di RAM** ($324.000.000 \times 8 \text{ byte}$).
+
+In questa implementazione "naive", il problema critico è la matrice B:
+`double *b = malloc(n * n * sizeof(double));`
+Questo comando fa sì che **ogni singolo processo** allochi l'intera matrice B.
+
+Inoltre, il processo Rank 0 alloca anche le matrici globali A e C:
+`a = malloc(n * n * sizeof(double));`
+`c = malloc(n * n * sizeof(double));`
+(Quindi il Rank 0 si prende da solo altri 5.18 GB extra).
+
+### Confrontiamo i due scenari:
+
+**Caso 1: 16 Processi (Funziona)**
+* Matrice B (replicata 16 volte): $16 \times 2.59 \text{ GB} = 41.4 \text{ GB}$
+* Matrici A e C (solo su Rank 0): $2 \times 2.59 \text{ GB} = 5.2 \text{ GB}$
+* Array locali (A e C frammentati): circa $5.2 \text{ GB}$ in totale.
+* **Memoria RAM totale richiesta:** circa **52 GB** (più l'overhead di sistema e di MPI).
+* *Esito:* Se il tuo nodo ha i classici 64 GB di RAM, il programma ci entra pelo pelo e arriva alla fine.
+
+**Caso 2: 24 Processi (Crasha)**
+* Matrice B (replicata 24 volte): $24 \times 2.59 \text{ GB} = 62.1 \text{ GB}$
+* Matrici A e C (solo su Rank 0): $5.2 \text{ GB}$
+* Array locali: circa $5.2 \text{ GB}$
+* **Memoria RAM totale richiesta:** oltre **72 GB**.
+* *Esito:* Superi la RAM fisica disponibile. Il sistema operativo (tramite il Linux OOM Killer) si accorge che la memoria è finita e "uccide" brutalmente i processi di MPI per salvare il sistema, causando il crash.
+
+### Perché questo è fantastico per la tua presentazione
+Puoi usare questo esatto crash come ponte narrativo tra le due slide!
+
+Mentre presenti questa versione base, puoi dire:
+*"Questa implementazione ha un limite enorme di scalabilità spaziale. Poiché ogni processo deve memorizzare un'intera copia della matrice B per poter fare i calcoli locali, all'aumentare dei processi la RAM necessaria esplode. Con matrici 18000x18000, appena superiamo i 16 processi saturiamo i 64GB di RAM del nodo e il sistema crasha.* **Ed è per risolvere esattamente questo collo di bottiglia che si passa a ScaLAPACK** *che, dividendo a blocchi la matrice su una griglia 2D, distribuisce anche il peso in memoria, impedendo queste saturazioni."*
