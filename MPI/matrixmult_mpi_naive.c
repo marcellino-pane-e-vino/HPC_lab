@@ -13,9 +13,24 @@ int main(int argc, char **argv) {
 
     if (argc < 2) n = 1000; else n = atoi(argv[1]);
 
-    // Distribuzione del carico (Load Balancing)
-    int rows_per_proc = n / size; 
+    int remainder = n % size; 
+    int rows_per_proc = (n / size) + (rank < remainder ? 1 : 0); 
     
+    // MODIFICA 2: Array per le mappe di Scatterv e Gatherv
+    int *sendcounts = malloc(size * sizeof(int));
+    int *displs = malloc(size * sizeof(int));
+    
+    int current_displ = 0;
+    for (int i = 0; i < size; i++) {
+        // Calcolo quante righe spettano al processo 'i'
+        int r = (n / size) + (i < remainder ? 1 : 0);
+        // Moltiplico per 'n' perché MPI conta i singoli double, non le righe!
+        sendcounts[i] = r * n; 
+        displs[i] = current_displ;
+        current_displ += sendcounts[i]; // Aggiorno l'offset per il prossimo
+    }
+
+    // Le allocazioni usano il nuovo rows_per_proc calcolato su misura
     double *local_a = malloc(rows_per_proc * n * sizeof(double));
     double *local_c = malloc(rows_per_proc * n * sizeof(double));
     double *b = malloc(n * n * sizeof(double));
@@ -27,19 +42,17 @@ int main(int argc, char **argv) {
         for (int i = 0; i < n * n; i++) { a[i] = 2.0; b[i] = 3.0; }
     }
 
-    // 1. SINCRONIZZAZIONE (MPI_Barrier)
-    // Forza tutti i processi ad aspettare qui. 
-    // Serve per far partire il cronometro nello stesso istante per tutti.
     MPI_Barrier(MPI_COMM_WORLD); 
-    double start = MPI_Wtime(); // 2. MPI_Wtime restituisce il tempo "reale"
+    double start = MPI_Wtime(); 
 
-    // 3. COMUNICAZIONE COLLETTIVA
-    // Bcast: invia la matrice B intera a tutti i processi
     MPI_Bcast(b, n * n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    // Scatter: divide la matrice A e ne invia un pezzo a ciascuno
-    MPI_Scatter(a, rows_per_proc * n, MPI_DOUBLE, local_a, rows_per_proc * n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    
+    // MODIFICA 3: Sostituzione con MPI_Scatterv
+    MPI_Scatterv(a, sendcounts, displs, MPI_DOUBLE, 
+                 local_a, rows_per_proc * n, MPI_DOUBLE, 
+                 0, MPI_COMM_WORLD);
 
-    // 4. CALCOLO LOCALE
+    // CALCOLO LOCALE (Invariato, funziona da solo grazie al nuovo rows_per_proc)
     for (int i = 0; i < rows_per_proc; i++) {
         for (int j = 0; j < n; j++) {
             local_c[i * n + j] = 0;
@@ -49,8 +62,12 @@ int main(int argc, char **argv) {
         }
     }
 
-    // 5. RACCOLTA DATI (Gather)
-    MPI_Gather(local_c, rows_per_proc * n, MPI_DOUBLE, c, rows_per_proc * n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    // MODIFICA 4: Sostituzione con MPI_Gatherv
+    // Usiamo comodamente gli stessi sendcounts e displs perché 
+    // la matrice C ha la stessa forma della A!
+    MPI_Gatherv(local_c, rows_per_proc * n, MPI_DOUBLE, 
+                c, sendcounts, displs, MPI_DOUBLE, 
+                0, MPI_COMM_WORLD);
 
     double end = MPI_Wtime();
     double duration = end - start;
@@ -64,6 +81,10 @@ int main(int argc, char **argv) {
         free(a); free(c);
     }
 
+    // MODIFICA 5: Pulizia della memoria extra
+    free(sendcounts); 
+    free(displs);
+    
     free(local_a); free(local_c); free(b);
     MPI_Finalize();
     return 0;
