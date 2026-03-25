@@ -1,127 +1,70 @@
-#!/bin/bash
+//# I_MPI_FABRICS=shm mpirun -np (NUMERO DI PROCESSI) ./matrixmult_mpi N
 
-source /opt/intel/oneapi/setvars.sh > /dev/null 2>&1
+#include <stdio.h>
+#include <stdlib.h>
+#include <mpi.h>
 
-set -euo pipefail
+int main(int argc, char **argv) {
+    int rank, size, n;
+    
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-# ==========================================
-# CONFIGURATION
-# ==========================================
-SOURCES=("matrixmult_mpi_naive.c") 
-#"matrixmult_mpi_scalapack.c" "matrixmult_mpi_library.c")
-#SOURCES=("matrixmult_mpi_scalapack.c" "matrixmult_mpi_library.c")
+    if (argc < 2) n = 1000; else n = atoi(argv[1]);
 
-COMPILER_FLAGS=("-O3 -xHost")
+    // Distribuzione del carico (Load Balancing)
+    int rows_per_proc = n / size; 
+    
+    double *local_a = malloc(rows_per_proc * n * sizeof(double));
+    double *local_c = malloc(rows_per_proc * n * sizeof(double));
+    double *b = malloc(n * n * sizeof(double));
+    double *a = NULL, *c = NULL;
 
-NUM_PROCS=32
-MATRIX_SIZE=5000
-CSV_OUTPUT="benchmark_results.csv"
+    if (rank == 0) {
+        a = malloc(n * n * sizeof(double));
+        c = malloc(n * n * sizeof(double));
+        for (int i = 0; i < n * n; i++) { a[i] = 2.0; b[i] = 3.0; }
+    }
 
-MPICC_BIN="mpiicc"
-MPIRUN_BIN="mpirun"
+    // 1. SINCRONIZZAZIONE (MPI_Barrier)
+    // Forza tutti i processi ad aspettare qui. 
+    // Serve per far partire il cronometro nello stesso istante per tutti.
+    MPI_Barrier(MPI_COMM_WORLD); 
+    double start = MPI_Wtime(); // 2. MPI_Wtime restituisce il tempo "reale"
 
-# Track failures
-ANY_FAILURE=0
+    // 3. COMUNICAZIONE COLLETTIVA
+    // Bcast: invia la matrice B intera a tutti i processi
+    MPI_Bcast(b, n * n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    // Scatter: divide la matrice A e ne invia un pezzo a ciascuno
+    MPI_Scatter(a, rows_per_proc * n, MPI_DOUBLE, local_a, rows_per_proc * n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-# ==========================================
-# CHECKS
-# ==========================================
+    // 4. CALCOLO LOCALE
+    for (int i = 0; i < rows_per_proc; i++) {
+        for (int j = 0; j < n; j++) {
+            local_c[i * n + j] = 0;
+            for (int k = 0; k < n; k++) {
+                local_c[i * n + j] += local_a[i * n + k] * b[k * n + j];
+            }
+        }
+    }
 
-if ! command -v $MPICC_BIN &> /dev/null; then
-    echo "ERROR: mpicc not found."
-    exit 1
-fi
+    // 5. RACCOLTA DATI (Gather)
+    MPI_Gather(local_c, rows_per_proc * n, MPI_DOUBLE, c, rows_per_proc * n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-if [ -z "${MKLROOT:-}" ]; then
-    echo "ERROR: MKL not available."
-    exit 1
-fi
+    double end = MPI_Wtime();
+    double duration = end - start;
 
-# ==========================================
-# INIT
-# ==========================================
+    if (rank == 0) {
+        printf("--------------------------------------\n");
+        printf("Taglia Matrice: %d x %d\n", n, n);
+        printf("Processi usati: %d\n", size);
+        printf("Tempo Totale:   %.6f secondi\n", duration);
+        printf("--------------------------------------\n");
+        free(a); free(c);
+    }
 
-if [ ! -f "$CSV_OUTPUT" ]; then
-    echo "Source,Flags,MatrixSize,Procs,Time_Seconds" > "$CSV_OUTPUT"
-fi
-
-echo "--------------------------------------------------"
-echo " Starting Multi-Source HPC Benchmark"
-echo "--------------------------------------------------"
-
-# ==========================================
-# MAIN LOOP
-# ==========================================
-
-for SRC in "${SOURCES[@]}"; do
-    for FLAGS in "${COMPILER_FLAGS[@]}"; do
-
-        OUT_BIN="${SRC%.c}.out"
-
-        echo ">>> CURRENT TASK: $SRC"
-        echo "    [STEP 1/2] Compiling..."
-
-        if [[ "$SRC" == "matrixmult_mpi_library.c" ]]; then
-            echo "    Using ScaLAPACK (MKL manual linking)"
-
-            if ! $MPICC_BIN "$SRC" -o "$OUT_BIN" $FLAGS \
-                -I${MKLROOT}/include \
-                -L${MKLROOT}/lib/intel64 \
-                -lmkl_scalapack_lp64 \
-                -lmkl_blacs_intelmpi_lp64 \
-                -lmkl_intel_lp64 \
-                -lmkl_core \
-                -lmkl_sequential \
-                -lpthread -lm -ldl; then
-
-                echo "    ERROR: Compilation failed (ScaLAPACK)"
-                ANY_FAILURE=1
-                continue
-            fi
-
-        else
-            if ! $MPICC_BIN "$SRC" -o "$OUT_BIN" $FLAGS -lm; then
-                echo "    ERROR: Compilation failed"
-                ANY_FAILURE=1
-                continue
-            fi
-        fi
-
-        echo "    [STEP 2/2] Executing..."
-
-        set +e
-        EXEC_OUT=$($MPIRUN_BIN -np "$NUM_PROCS" "./$OUT_BIN" "$MATRIX_SIZE" 2>&1)
-        RUN_STATUS=$?
-        set -e
-
-        if [ $RUN_STATUS -eq 0 ]; then
-            TIME_VAL=$(echo "$EXEC_OUT" | grep -Ei "time|tempo" | grep -Eo '[0-9]+\.[0-9]+' | tail -1)
-
-            if [ -z "$TIME_VAL" ]; then
-                TIME_VAL="NaN"
-            fi
-
-            echo "    SUCCESS: ${TIME_VAL}s"
-            echo "$SRC,\"$FLAGS\",$MATRIX_SIZE,$NUM_PROCS,$TIME_VAL" >> "$CSV_OUTPUT"
-
-        else
-            echo "    ERROR: Runtime crash (Exit Code $RUN_STATUS)"
-            echo "$EXEC_OUT"
-            ANY_FAILURE=1
-        fi
-
-        echo "--------------------------------------------------"
-    done
-done
-
-# ==========================================
-# FINAL STATUS
-# ==========================================
-
-if [ "$ANY_FAILURE" -eq 0 ]; then
-    echo " All tasks completed successfully."
-else
-    echo " Completed with ERRORS. Check logs above."
-fi
-
-echo " Results: $CSV_OUTPUT"
+    free(local_a); free(local_c); free(b);
+    MPI_Finalize();
+    return 0;
+}
