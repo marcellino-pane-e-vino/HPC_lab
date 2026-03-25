@@ -263,3 +263,10 @@ La Trasposizione come Salvezza: Per curare questo disastro, prima di iniziare il
 
 Il Concetto in una frase
 Nel caso Sequenziale, hai la libertà di usare l'ordine i-k-j, che ha un accesso in memoria già perfetto, rendendo la trasposizione uno spreco inutile. In OpenMP, per evitare che i thread si contino i calcoli a vicenda, sei costretto a usare l'ordine i-j-k, che distrugge la Cache leggendo in verticale; la trasposizione è la cura necessaria per raddrizzare i dati e salvare le performance.
+
+
+
+
+----------------------------------------------------------------------------------------------------------
+
+"L'architettura ibrida introduce un problema critico di Load Imbalance (sbilanciamento del carico). Se usiamo un banale #pragma omp parallel for e dividiamo le righe della matrice in 24 parti uguali, i 16 thread assegnati ai P-Cores finiranno il loro lavoro molto prima degli 8 thread assegnati agli E-Cores. I P-Cores rimarranno in idle (fermi a consumare corrente) aspettando che i core lenti finiscano, distruggendo l'efficienza parallela. Per risolvere questo problema, su CPU ibride è fondamentale usare uno scheduling dinamico in OpenMP (ad esempio schedule(dynamic)) in modo che i P-Cores, finendo prima, possano prendere in carico altre porzioni di matrice, bilanciando il lavoro asimmetrico dell'hardware."
