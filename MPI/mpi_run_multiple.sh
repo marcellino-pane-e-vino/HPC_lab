@@ -8,11 +8,11 @@ set -euo pipefail
 # CONFIGURATION
 # ==========================================
 #SOURCES=("matrixmult_mpi_opt.c" "matrixmult_mpi_opt_beta.c" "matrixmult_mpi_library.c")
-SOURCES=("matrixmult_mpi_naive.c" "matrixmult_mpi_opt.c" "matrixmult_mpi_scaLAPACK.c"  "matrixmult_mpi_library.c" )
+SOURCES=("matrixmult_mpi_naive.c" "matrixmult_mpi_opt.c"  "matrixmult_mpi_opt_beta.c"  "matrixmult_mpi_scaLAPACK.c"  "matrixmult_mpi_library.c" )
 COMPILER_FLAGS=("-O3 -xHost")
 
 NUM_PROCS=16
-MATRIX_SIZE=10000
+MATRIX_SIZE=12000
 CSV_OUTPUT="benchmark_results.csv"
 
 MPICC_BIN="mpiicc"
