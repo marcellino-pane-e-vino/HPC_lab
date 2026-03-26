@@ -98,22 +98,20 @@ int main(int argc, char **argv) {
     // ==========================================
     // Assumiamo griglia quadrata p_rows == p_cols per la moltiplicazione standard
     for (int k = 0; k < p_cols; k++) {
-        // 4.1 Broadcast del pannello A lungo le righe
-        if (my_col == k) memcpy(panel_a, local_a, block_size * sizeof(double));
-        MPI_Bcast(panel_a, block_size, MPI_DOUBLE, k, row_comm);
+        // 4.1 Broadcast riga del blocco di A 
+        if (my_col == k) memcpy(panel_a, local_a, block_size * sizeof(double)); //se sono il proprietario del blocco corrispondente a K lo metto nella variabile da broadcastare
+        MPI_Bcast(panel_a, block_size, MPI_DOUBLE, k, row_comm); // in base al valore di K ""prende dalla piazza" o "mette "in piazza" il blocco di A che serve per questa iterazione
 
-        // 4.2 Broadcast del pannello B lungo le colonne
-        if (my_row == k) memcpy(panel_b, local_b, block_size * sizeof(double));
-        MPI_Bcast(panel_b, block_size, MPI_DOUBLE, k, col_comm);
+        // 4.2 Broadcast colonna del blocco di B
+        if (my_row == k) memcpy(panel_b, local_b, block_size * sizeof(double)); //se sono il proprietario del blocco corrispondente a K lo metto nella variabile da broadcastare
+        MPI_Bcast(panel_b, block_size, MPI_DOUBLE, k, col_comm); //in base al valore di K "prende dalla piazza" o "mette in piazza" il blocco di B che serve per questa iterazione
 
         // 4.3 Moltiplicazione locale Tassellata (Cache Blocking)
-        // I 3 cicli ESTERNI spostano la "finestrella" di NB in NB
         for (int ii = 0; ii < local_rows; ii += NB) {
             for (int kk = 0; kk < local_cols; kk += NB) {
                 for (int jj = 0; jj < local_cols; jj += NB) {
                     
-                    // Calcoliamo i limiti della finestrella per non uscire fuori dai bordi
-                    // (Utile se la sottomatrice non è un multiplo esatto di NB)
+                    // Calcoliamo i limiti della finestrella per non uscire fuori dai bordi (Utile se la sottomatrice non è un multiplo esatto di NB)
                     int i_max = MIN(ii + NB, local_rows);
                     int k_max = MIN(kk + NB, local_cols);
                     int j_max = MIN(jj + NB, local_cols);
