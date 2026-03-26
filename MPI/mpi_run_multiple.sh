@@ -13,7 +13,7 @@ SOURCES=("matrixmult_mpi_naive.c" "matrixmult_mpi_opt.c"  "matrixmult_mpi_advanc
 COMPILER_FLAGS=("-O3 -xHost" )
 
 NUM_PROCS=16
-MATRIX_SIZE=15000
+MATRIX_SIZE=12000
 CSV_OUTPUT="benchmark_results.csv"
 
 MPICC_BIN="mpiicx"
@@ -63,7 +63,7 @@ for SRC in "${SOURCES[@]}"; do
         if [[ "$SRC" == "matrixmult_mpi_library.c" ]]; then
             echo "    Using ScaLAPACK (MKL manual linking)"
 
-            if ! $MPICC_BIN "$SRC" -o "$OUT_BIN" $FLAGS \
+            if ! $MPICC_BIN $FLAGS "$SRC" -o "$OUT_BIN" \
                 -I${MKLROOT}/include \
                 -L${MKLROOT}/lib/intel64 \
                 -lmkl_scalapack_lp64 \
@@ -79,7 +79,7 @@ for SRC in "${SOURCES[@]}"; do
             fi
 
         else
-            if ! $MPICC_BIN "$SRC" -o "$OUT_BIN" $FLAGS -lm; then
+            if ! $MPICC_BIN $FLAGS "$SRC" -o "$OUT_BIN" -lm; then
                 echo "    ERROR: Compilation failed"
                 ANY_FAILURE=1
                 continue
