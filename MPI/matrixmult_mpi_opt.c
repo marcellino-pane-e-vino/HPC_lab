@@ -7,62 +7,51 @@
 #include <mpi.h>
 
 int main(int argc, char **argv) {
-    // ==========================================
-    // 1. Initialization + Load balancing
-    // ==========================================
+    // 1. INITIALIZATION + LOAD BALANCING
     int rank, size, n;
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     if (argc < 2) n = 1000; else n = atoi(argv[1]);
-
-    // Creazione della griglia cartesiana 2D
+    // creating 2d grid
     int dims[2] = {0, 0}, periods[2] = {0, 0}, coords[2];
-    MPI_Dims_create(size, 2, dims); // Crea automaticamente una griglia (es. 2x2 se size=4)
+    MPI_Dims_create(size, 2, dims);
     int p_rows = dims[0];
     int p_cols = dims[1];
-
+    // creating communicators
     MPI_Comm cart_comm, row_comm, col_comm;
     MPI_Cart_create(MPI_COMM_WORLD, 2, dims, periods, 0, &cart_comm);
     MPI_Cart_coords(cart_comm, rank, 2, coords);
     int my_row = coords[0];
     int my_col = coords[1];
-
-    // Sdoppiamento comunicatori per i broadcast di riga e colonna di SUMMA
-    MPI_Comm_split(cart_comm, my_row, my_col, &row_comm);
-    MPI_Comm_split(cart_comm, my_col, my_row, &col_comm);
-
-    // Load Balancing semplificato per il template: blocchi 2D esatti
+    MPI_Comm_split(cart_comm, my_row, my_col, &row_comm); // Creating custom communicator for column brodcast
+    MPI_Comm_split(cart_comm, my_col, my_row, &col_comm); // Creating custom communicator for row brodcast
+    // Simplified load balancing: exact 2D blocks
     int local_rows = n / p_rows;
     int local_cols = n / p_cols;
     int block_size = local_rows * local_cols;
 
-    // ==========================================
-    // 2. Memory allocation
-    // ==========================================
-    double *local_a = malloc(block_size * sizeof(double));
-    double *local_b = malloc(block_size * sizeof(double));
-    double *local_c = calloc(block_size, sizeof(double)); // Inizializzato a 0
-    
-    // Buffer per ricevere i "pannelli" durante SUMMA
-    double *panel_a = malloc(block_size * sizeof(double));
-    double *panel_b = malloc(block_size * sizeof(double));
-
-    double *a = NULL, *b_global = NULL, *c = NULL;
+    // 2. MEMORY ALLOCATION
+    // local matrices blocks
+    double *a_local = malloc(block_size * sizeof(double));
+    double *b_local = malloc(block_size * sizeof(double));
+    double *c_local = calloc(block_size, sizeof(double)); // every process is responsible of computing this
+    // blocks to be brodcasted to/from
+    double *a_buffer = malloc(block_size * sizeof(double));
+    double *b_buffer = malloc(block_size * sizeof(double));
+    // rank 0 initialises the whole global matrices
+    double *a_global = NULL, *b_global = NULL, *c_global = NULL;
     if (rank == 0) {
-        a = malloc(n * n * sizeof(double));
+        a_global = malloc(n * n * sizeof(double));
         b_global = malloc(n * n * sizeof(double));
-        c = calloc(n * n, sizeof(double));
-        for (int i = 0; i < n * n; i++) { a[i] = 2.0; b_global[i] = 3.0; }
+        c_global = calloc(n * n, sizeof(double));
+        for (int i = 0; i < n * n; i++) { a_global[i] = 2.0; b_global[i] = 3.0; }
     }
 
-    // ==========================================
-    // 3. Synchronization and distribution
-    // ==========================================
+    // 3. SYNCHRONIZATION AND DISTRIBUTION
     MPI_Barrier(cart_comm); 
     double start = MPI_Wtime();
-
-    // Distribuzione manuale dei blocchi 2D da rank 0 a tutti gli altri
+    // Manual 2D distribution from rank 0 from global to local matrices
     if (rank == 0) {
         double *tmp_buf = malloc(block_size * sizeof(double));
         for (int pr = 0; pr < p_rows; pr++) {
@@ -70,17 +59,16 @@ int main(int argc, char **argv) {
                 int dest_coords[2] = {pr, pc};
                 int dest_rank;
                 MPI_Cart_rank(cart_comm, dest_coords, &dest_rank);
-
-                // Estrai il blocco per A e per B
+                // Extract local blocks from a_global and b_global
                 for(int m = 0; m < 2; m++) {
-                    double *source_matrix = (m == 0) ? a : b_global;
+                    double *source_matrix = (m == 0) ? a_global : b_global;
                     for (int i = 0; i < local_rows; i++) {
                         memcpy(tmp_buf + i * local_cols, 
                                source_matrix + ((pr * local_rows + i) * n) + (pc * local_cols), 
                                local_cols * sizeof(double));
                     }
                     if (dest_rank == 0) {
-                        memcpy((m == 0) ? local_a : local_b, tmp_buf, block_size * sizeof(double));
+                        memcpy((m == 0) ? a_local : b_local, tmp_buf, block_size * sizeof(double));
                     } else {
                         MPI_Send(tmp_buf, block_size, MPI_DOUBLE, dest_rank, m, cart_comm);
                     }
@@ -88,40 +76,34 @@ int main(int argc, char **argv) {
             }
         }
         free(tmp_buf);
+    // ranks different from 0 recieve their respective local blocs
     } else {
-        MPI_Recv(local_a, block_size, MPI_DOUBLE, 0, 0, cart_comm, MPI_STATUS_IGNORE);
-        MPI_Recv(local_b, block_size, MPI_DOUBLE, 0, 1, cart_comm, MPI_STATUS_IGNORE);
+        MPI_Recv(a_local, block_size, MPI_DOUBLE, 0, 0, cart_comm, MPI_STATUS_IGNORE);
+        MPI_Recv(b_local, block_size, MPI_DOUBLE, 0, 1, cart_comm, MPI_STATUS_IGNORE);
     }
-
-    // ==========================================
-    // 4. Local computation (SUMMA Core con Tassellazione)
-    // ==========================================
-    // Assumiamo griglia quadrata p_rows == p_cols per la moltiplicazione standard
+    // 4. LOCAL COMPUTATION (SUMMA)
     for (int k = 0; k < p_cols; k++) {
-        // 4.1 Broadcast riga del blocco di A 
-        if (my_col == k) memcpy(panel_a, local_a, block_size * sizeof(double)); //se sono il proprietario del blocco corrispondente a K lo metto nella variabile da broadcastare
-        MPI_Bcast(panel_a, block_size, MPI_DOUBLE, k, row_comm); // in base al valore di K ""prende dalla piazza" o "mette "in piazza" il blocco di A che serve per questa iterazione
+        // 4.1 Row broadcast to get block for A
+        if (my_col == k) memcpy(a_buffer, a_local, block_size * sizeof(double)); // if this process owns the block correspondint to K i broadcast it to the others 
+        MPI_Bcast(a_buffer, block_size, MPI_DOUBLE, k, row_comm); // depending on K value i "give" or "take" the block needed for this iteration
+        //4.1 Column broadcast to get block for B
+        if (my_row == k) memcpy(b_buffer, b_local, block_size * sizeof(double)); // if this process owns the block correspondint to K i broadcast it to the others 
+        MPI_Bcast(b_buffer, block_size, MPI_DOUBLE, k, col_comm); // depending on K value i "give" or "take" the block needed for this iteration
 
-        // 4.2 Broadcast colonna del blocco di B
-        if (my_row == k) memcpy(panel_b, local_b, block_size * sizeof(double)); //se sono il proprietario del blocco corrispondente a K lo metto nella variabile da broadcastare
-        MPI_Bcast(panel_b, block_size, MPI_DOUBLE, k, col_comm); //in base al valore di K "prende dalla piazza" o "mette in piazza" il blocco di B che serve per questa iterazione
-
-        // 4.3 Moltiplicazione locale Tassellata (Cache Blocking)
+        // 4.3 Tiled local multiplication
         for (int ii = 0; ii < local_rows; ii += NB) {
             for (int kk = 0; kk < local_cols; kk += NB) {
                 for (int jj = 0; jj < local_cols; jj += NB) {
-                    
-                    // Calcoliamo i limiti della finestrella per non uscire fuori dai bordi (Utile se la sottomatrice non è un multiplo esatto di NB)
+                    // Clamp tile boundaries to prevent out-of-bounds access for non-multiples of NB.
                     int i_max = MIN(ii + NB, local_rows);
                     int k_max = MIN(kk + NB, local_cols);
                     int j_max = MIN(jj + NB, local_cols);
-
-                    // I 3 cicli INTERNI lavorano solo nel micro-blocco che sta in Cache L1
+                    // internal loop (as seen in sequential optimization)
                     for (int i = ii; i < i_max; i++) {
                         for (int k_idx = kk; k_idx < k_max; k_idx++) {
-                            double a_ik = panel_a[i * local_cols + k_idx];
+                            double a_ik = a_buffer[i * local_cols + k_idx];
                             for (int j = jj; j < j_max; j++) {
-                                local_c[i * local_cols + j] += a_ik * panel_b[k_idx * local_cols + j];
+                                c_local[i * local_cols + j] += a_ik * b_buffer[k_idx * local_cols + j];
                             }
                         }
                     }
@@ -130,9 +112,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    // ==========================================
-    // 5. Gather + output
-    // ==========================================
+    // 5. GATHER + OUTPUT
     if (rank == 0) {
         double *tmp_buf = malloc(block_size * sizeof(double));
         for (int pr = 0; pr < p_rows; pr++) {
@@ -142,14 +122,14 @@ int main(int argc, char **argv) {
                 MPI_Cart_rank(cart_comm, src_coords, &src_rank);
 
                 if (src_rank == 0) {
-                    memcpy(tmp_buf, local_c, block_size * sizeof(double));
+                    memcpy(tmp_buf, c_local, block_size * sizeof(double));
                 } else {
                     MPI_Recv(tmp_buf, block_size, MPI_DOUBLE, src_rank, 2, cart_comm, MPI_STATUS_IGNORE);
                 }
 
-                // Incolla il blocco nella matrice globale C
+                // Paste c blocks into global output
                 for (int i = 0; i < local_rows; i++) {
-                    memcpy(c + ((pr * local_rows + i) * n) + (pc * local_cols), 
+                    memcpy(c_global + ((pr * local_rows + i) * n) + (pc * local_cols), 
                            tmp_buf + i * local_cols, 
                            local_cols * sizeof(double));
                 }
@@ -159,22 +139,20 @@ int main(int argc, char **argv) {
         
         double end = MPI_Wtime();
         printf("--------------------------------------\n");
-        printf("Taglia Matrice: %d x %d (SUMMA Template)\n", n, n);
-        printf("Processi usati: %d (Griglia %dx%d)\n", size, p_rows, p_cols);
-        printf("Tempo Totale:   %.6f secondi\n", end - start);
-        printf("C[0,0] = %.2f\n", c[0]);
+        printf("Matrix Size: %d x %d (SUMMA Template)\n", n, n);
+        printf("Processes used: %d (Grid %dx%d)\n", size, p_rows, p_cols);
+        printf("Total time:   %.6f sec\n", end - start);
+        printf("C[0,0] = %.2f\n", c_global[0]);
         printf("--------------------------------------\n");
         
-        free(a); free(b_global); free(c);
+        free(a_global); free(b_global); free(c_global);
     } else {
-        MPI_Send(local_c, block_size, MPI_DOUBLE, 0, 2, cart_comm);
+        MPI_Send(c_local, block_size, MPI_DOUBLE, 0, 2, cart_comm);
     }
 
-    // ==========================================
-    // 6. Cleanup
-    // ==========================================
-    free(local_a); free(local_b); free(local_c);
-    free(panel_a); free(panel_b);
+    // 6. CLEANUP
+    free(a_local); free(b_local); free(c_local);
+    free(a_buffer); free(b_buffer);
     
     MPI_Comm_free(&row_comm);
     MPI_Comm_free(&col_comm);
