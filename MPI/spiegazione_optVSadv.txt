@@ -1,0 +1,32 @@
+CONFRONTO IMPLEMENTAZIONI MPI MATRIX MULTIPLICATION
+(matrixmult_mpi_opt.c VS matrixmult_mpi_advanced.c)
+
+    DISTRIBUZIONE DATI E BILANCIAMENTO
+
+    OPT: Utilizza una distribuzione a blocchi 2D semplice. Ogni processo riceve un singolo, grande blocco di matrice da elaborare. Questo approccio è facile da implementare ma può sbilanciare il carico di lavoro se l'hardware non è omogeneo.
+
+    ADVANCED: Utilizza una distribuzione Block-Cyclic 2D. La matrice è frammentata in numerosi sottomultipli di dimensione fissa (NB = 32) e distribuiti a "turni" ai vari processi. Questo bilancia il carico di lavoro in modo eccellente su tutta la griglia dei processi.
+
+    ITERAZIONI SUMMA E COMUNICAZIONI DI RETE
+
+    OPT: Il ciclo principale esegue un numero di iterazioni pari a "p_cols" (il numero di colonne della griglia di processi). Trasmette tramite broadcast pannelli di dati molto grandi, il che crea colli di bottiglia temporanei sulla rete.
+
+    ADVANCED: Il ciclo esegue "nblocks" iterazioni, che sono molte di più. A ogni giro trasmette strisce di dati molto più sottili e gestibili. Questa maggiore granularità permette di sovrapporre meglio i tempi di comunicazione con quelli di calcolo della CPU.
+
+    LAYOUT IN MEMORIA E UTILIZZO DELLA CACHE
+
+    OPT: La sottomatrice locale è allocata come un array unidimensionale (piatto) e "saltare" tra le colonne richiede salti di memoria (striding). Questo causa spesso l'invalidazione della memoria cache.
+
+    ADVANCED: Sfrutta funzioni specifiche (come "pack_global_block_to_padded") per riorganizzare i dati: i blocchi 32x32 vengono letteralmente "impacchettati" in aree di memoria totalmente contigue. La prefetcher della CPU L1 fa molta meno fatica a recuperare i dati durante i calcoli.
+
+    GESTIONE DEI BORDI (CASI LIMITE)
+
+    OPT: Presuppone che la dimensione della matrice (n) sia divisibile in modo esatto per la griglia dei processi. Se la matrice è irregolare, rischia di tagliare fuori dei dati o dare errori.
+
+    ADVANCED: Gestisce elegantemente i bordi della matrice calcolando lo spazio residuo ("block_extent") ed effettuando un "padding" (riempimento a zero) sui blocchi periferici. È un codice decisamente più robusto.
+
+    LOGICA DEL CALCOLO LOCALE (GEMM)
+
+    OPT: Implementa 6 cicli "for" annidati nel tentativo di fare un "cache blocking" manuale a livello di micro-istruzione.
+
+    ADVANCED: Visto che i dati sono già stati impacchettati in modo ottimale a monte, la funzione "local_block_gemm" usa solo i 3 classici cicli "for" per calcolare il prodotto sul piccolo blocco in memoria. Il codice è più pulito e l'hardware performa meglio.
