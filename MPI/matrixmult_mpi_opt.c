@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <mpi.h>
-
+void check_result(double *c_global, int n, double val_a, double val_b);
 int main(int argc, char **argv) {
     // 1. INITIALIZATION + LOAD BALANCING
     int rank, size, n;

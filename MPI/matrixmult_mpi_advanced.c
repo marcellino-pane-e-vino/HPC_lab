@@ -6,22 +6,6 @@
 #define NB 32
 #define MIN(a,b) ((a)<(b)?(a):(b))
 
-/*
- * Shorter SUMMA-like distributed matrix multiplication.
- *
- * Theory:
- * - 2D Cartesian process grid
- * - 2D block-cyclic distribution
- * - row/column communicators
- * - SUMMA panel broadcasts
- *
- * Active path:
- * - static/root initialization of full A and B on rank 0
- * - distribution of blocks to owners
- *
- * Goal:
- * - clearer comparison against a naive MPI version
- */
 
 static int num_local_blocks(int nblocks, int coord, int nprocs_dim) {
     int count = 0;

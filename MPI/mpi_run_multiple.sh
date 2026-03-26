@@ -13,7 +13,7 @@ SOURCES=("matrixmult_mpi_naive.c" "matrixmult_mpi_opt.c"  "matrixmult_mpi_advanc
 COMPILER_FLAGS=("-O3 -xHost" )
 
 NUM_PROCS=16
-MATRIX_SIZE=12000
+MATRIX_SIZE=1000
 CSV_OUTPUT="benchmark_results.csv"
 
 MPICC_BIN="mpiicx"
