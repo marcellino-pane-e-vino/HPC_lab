@@ -1,7 +1,0 @@
-Versione,Schedule,Tempo (s),Speedup (vs Seq. relativo),Throughput (GFLOPS)
-NAIVE,Static,28.97,2.66x,69.04
-NAIVE,Dynamic,27.64,2.78x,72.36
-NAIVE,Guided,21.19,3.63x,94.38
-OPTIMIZED,Static,7.16,6.20x,279.33
-OPTIMIZED,Dynamic,6.66,6.66x,300.30
-OPTIMIZED,Guided,6.63,6.69x,301.66
