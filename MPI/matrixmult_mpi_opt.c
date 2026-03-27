@@ -5,7 +5,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <mpi.h>
+
 void check_result(double *c_global, int n, double val_a, double val_b);
+
 int main(int argc, char **argv) {
     // 1. INITIALIZATION + LOAD BALANCING
     int rank, size, n;
@@ -37,8 +39,8 @@ int main(int argc, char **argv) {
     double *b_local = malloc(block_size * sizeof(double));
     double *c_local = calloc(block_size, sizeof(double)); // every process is responsible of computing this
     // blocks to be brodcasted to/from
-    double *a_buffer = malloc(block_size * sizeof(double));
-    double *b_buffer = malloc(block_size * sizeof(double));
+    double *a_panel = malloc(block_size * sizeof(double));
+    double *b_panel = malloc(block_size * sizeof(double));
     // rank 0 initialises the whole global matrices
     double *a_global = NULL, *b_global = NULL, *c_global = NULL;
     if (rank == 0) {
@@ -84,11 +86,11 @@ int main(int argc, char **argv) {
     // 4. LOCAL COMPUTATION (SUMMA)
     for (int k = 0; k < p_cols; k++) {
         // 4.1 Row broadcast to get block for A
-        if (my_col == k) memcpy(a_buffer, a_local, block_size * sizeof(double)); // if this process owns the block correspondint to K i broadcast it to the others 
-        MPI_Bcast(a_buffer, block_size, MPI_DOUBLE, k, row_comm); // depending on K value i "give" or "take" the block needed for this iteration
+        if (my_col == k) memcpy(a_panel, a_local, block_size * sizeof(double)); // if this process owns the block correspondint to K i broadcast it to the others 
+        MPI_Bcast(a_panel, block_size, MPI_DOUBLE, k, row_comm); // depending on K value i "give" or "take" the block needed for this iteration
         //4.1 Column broadcast to get block for B
-        if (my_row == k) memcpy(b_buffer, b_local, block_size * sizeof(double)); // if this process owns the block correspondint to K i broadcast it to the others 
-        MPI_Bcast(b_buffer, block_size, MPI_DOUBLE, k, col_comm); // depending on K value i "give" or "take" the block needed for this iteration
+        if (my_row == k) memcpy(b_panel, b_local, block_size * sizeof(double)); // if this process owns the block correspondint to K i broadcast it to the others 
+        MPI_Bcast(b_panel, block_size, MPI_DOUBLE, k, col_comm); // depending on K value i "give" or "take" the block needed for this iteration
 
         // 4.3 Tiled local multiplication
         for (int ii = 0; ii < local_rows; ii += NB) {
@@ -101,9 +103,9 @@ int main(int argc, char **argv) {
                     // internal loop (as seen in sequential optimization)
                     for (int i = ii; i < i_max; i++) {
                         for (int k_idx = kk; k_idx < k_max; k_idx++) {
-                            double a_ik = a_buffer[i * local_cols + k_idx];
+                            double a_ik = a_panel[i * local_cols + k_idx];
                             for (int j = jj; j < j_max; j++) {
-                                c_local[i * local_cols + j] += a_ik * b_buffer[k_idx * local_cols + j];
+                                c_local[i * local_cols + j] += a_ik * b_panel[k_idx * local_cols + j];
                             }
                         }
                     }
@@ -154,7 +156,7 @@ int main(int argc, char **argv) {
 
     // 6. CLEANUP
     free(a_local); free(b_local); free(c_local);
-    free(a_buffer); free(b_buffer);
+    free(a_panel); free(b_panel);
     
     MPI_Comm_free(&row_comm);
     MPI_Comm_free(&col_comm);

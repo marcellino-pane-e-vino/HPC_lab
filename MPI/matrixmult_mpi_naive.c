@@ -1,5 +1,3 @@
-//# I_MPI_FABRICS=shm mpirun -np (NUMERO DI PROCESSI) ./matrixmult_mpi N
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <mpi.h>
@@ -19,10 +17,10 @@ int main(int argc, char **argv) {
     int *displs = malloc(size * sizeof(int));
     int current_displ = 0;
     for (int i = 0; i < size; i++) {
-        int r = (n / size) + (i < remainder ? 1 : 0); // Calcolo quante righe spettano al processo 'i'
-        sendcounts[i] = r * n; // Moltiplico per 'n' perché MPI conta i singoli double, non le righe!
+        int r = (n / size) + (i < remainder ? 1 : 0); // Rows assigned to rank 'i'
+        sendcounts[i] = r * n; // Total elements (rows * columns)
         displs[i] = current_displ;
-        current_displ += sendcounts[i]; // Aggiorno l'offset per il prossimo
+        current_displ += sendcounts[i]; // Update offset for the next rank
     }
 
     // 2. Memory allocation
