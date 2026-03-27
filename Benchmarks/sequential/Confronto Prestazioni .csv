@@ -1,4 +1,0 @@
-Versione Codice,Tempo (s),Speedup (vs Naive),Throughput (GFLOPS)
-Naive,76.98,1.00x,26.38
-Optimized (Loop Tiling),44.37,1.73x,45.08
-CBLAS,32.73,2.35x,61.11
