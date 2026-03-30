@@ -58,7 +58,6 @@ int main(int argc, char **argv) {
                         
                         // A and B_T read linearly(k increases)
                         // Simple "scalar product": icx vectorize it perfectly
-                        //#pragma omp simd reduction(+:sum)
                         for (int k = kk; k < k_end; k++) {
                             sum += a[i * N + k] * b_t[j * N + k];
                         }
@@ -71,7 +70,7 @@ int main(int argc, char **argv) {
     }
     
     double end_time = omp_get_wtime();
-    printf("Total time totale (transposition included): %f seconds\n", end_time - start_time);
+    printf("Total time (transposition included): %f seconds\n", end_time - start_time);
 
     free(a); free(b); free(c); free(b_t);
     return 0;
