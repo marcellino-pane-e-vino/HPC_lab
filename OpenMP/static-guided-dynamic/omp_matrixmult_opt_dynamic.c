@@ -7,7 +7,7 @@
 
 int main(int argc, char **argv) {
     if (argc < 3) {
-        printf("Errore argomenti\n");
+        printf("Missing arguments\n");
         return 1;
     }
     
@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
     }
     
     double end_time = omp_get_wtime();
-    printf("Total time totale (transposition included): %f seconds\n", end_time - start_time);
+    printf("Total time (transposition included): %f seconds\n", end_time - start_time);
 
     free(a); free(b); free(c); free(b_t);
     return 0;
