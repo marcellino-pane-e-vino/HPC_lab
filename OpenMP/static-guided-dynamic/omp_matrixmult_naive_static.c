@@ -10,11 +10,11 @@ int main(int argc, char **argv) {
       return 1;
   }
   
-  // Leggiamo N e il numero di thread da terminale
+  // We read N and the number of threads
   int n = atoi(argv[1]);
   int num_threads = atoi(argv[2]);
   
-  // Imponiamo a OpenMP quanti thread usare per questo run
+  //  We fix the number of threads to be used
   omp_set_num_threads(num_threads);
   
   // Allocazione dinamica
@@ -22,28 +22,24 @@ int main(int argc, char **argv) {
   //double (*b)[n] = malloc(sizeof(double[n][n]));
   //double (*c)[n] = malloc(sizeof(double[n][n]));
 
-
   /********* IMPROVEMENT *********/
-  // 1. Calcoliamo la memoria esatta richiesta dalla matrice
+  // We get the exact memory needed requested by the matrix
   size_t bytes = sizeof(double[n][n]);
   
-  // 2. Arrotondiamo la dimensione al multiplo di 64 successivo
-  // (Requisito rigido dello standard C per aligned_alloc)
+  //  We round the dimension as multiple of 64: strong requisite of standard C for aligned_alloc
   size_t aligned_bytes = (bytes + 63) & ~63;
 
-  // 3. Allocazione con memoria allineata a 64-byte e puntatori "restrict"
+  // Aligned memory allocation to 64-byte and "restrict" pointers
   double (* restrict a)[n] = aligned_alloc(64, aligned_bytes);
   double (* restrict b)[n] = aligned_alloc(64, aligned_bytes);
   double (* restrict c)[n] = aligned_alloc(64, aligned_bytes);
 
-
-
   if (!a || !b || !c) {
-      printf("Errore: Memoria insufficiente per N=%d!\n", n);
+      printf("Error: insufficient memory for N=%d!\n", n);
       return 1;
   }
 
-  printf("Inizializzazione parallela con %d thread...\n", num_threads);
+  printf("Parallel inizialization with %d threads...\n", num_threads);
   
   #pragma omp parallel for
   for (int i = 0; i < n; i++) {
@@ -58,12 +54,12 @@ int main(int argc, char **argv) {
   
   double start_time = omp_get_wtime(); 
 
-  // Qui gestiamo i thread sui vari core
+  // Here we handle the threads accross the cores
   #pragma omp parallel for schedule(static)
   for (int i = 0; i < n; ++i) {
      for (int k = 0; k < n; k++) {
         
-        // Qui forziamo la vettorizzazione SIMD all'interno del singolo core!
+        // We force SIMD vectorization inside each core
         //#pragma omp simd
         for (int j = 0; j < n; ++j) {
            c[i][j] += a[i][k] * b[k][j];
@@ -73,7 +69,7 @@ int main(int argc, char **argv) {
 
   double end_time = omp_get_wtime(); 
 
-  printf("Tempo di esecuzione OpenMP: %f secondi\n", end_time - start_time);
+  printf("OpenMP execution time: %f seconds\n", end_time - start_time);
 
   FILE *f = fopen("mat-res.txt", "w");
   if (!f) {
