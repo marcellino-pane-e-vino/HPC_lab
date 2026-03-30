@@ -1,4 +1,4 @@
-#define NB 32
+#define NB 64
 #define MIN(a,b) ((a)<(b)?(a):(b))
 
 #include <stdio.h>
