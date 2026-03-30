@@ -34,8 +34,6 @@ int main(int argc, char **argv) {
   double (* restrict b)[n] = aligned_alloc(64, aligned_bytes);
   double (* restrict c)[n] = aligned_alloc(64, aligned_bytes);
 
-
-
   if (!a || !b || !c) {
       printf("Error: insufficient memory for N=%d!\n", n);
       return 1;
