@@ -7,7 +7,7 @@
 
 int main(int argc, char **argv) {
     if (argc < 3) {
-        printf("Errore argomenti\n");
+        printf("Missing arguments\n");
         return 1;
     }
     
@@ -19,7 +19,6 @@ int main(int argc, char **argv) {
     double * restrict c = (double *)aligned_alloc(64, N * N * sizeof(double));
     // Allochiamo spazio per la matrice B trasposta
     double * restrict b_t = (double *)aligned_alloc(64, N * N * sizeof(double));
-
 
     #pragma omp parallel //for collapse(2)
     for (int i = 0; i < N; i++) {
