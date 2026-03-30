@@ -146,7 +146,7 @@ Size: n=15000 - Total Execution Time: 235.0233 seconds
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 - OpenMP / MPI
-Nota importante da fare sull'architettura: Note the hybrid core architecture, which presents specific load-balancing challenges for shared-memory parallelization.
+Note the hybrid core architecture, which presents specific load-balancing challenges for shared-memory parallelization.
 
 Full Tuning: icx -O3 -xHost -qopenmp -ffast-math -mprefer-vector-width=256 -fsimd-cost-model=unlimited
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -204,69 +204,11 @@ GCC - FLAG - MACRO
 
 To be not redundant, the same results were obtained through ICX, even without any flag, since ICX is able to apply optmization alone (smart compiler)
 
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-Gemini ha detto
-Questa è un'osservazione fantastica. Aver notato empiricamente questa differenza nei tempi di esecuzione significa che stai letteralmente "toccando" i limiti fisici dell'hardware attraverso il codice C.
-
-Il motivo per cui il blocco ottimale si dimezza (da 64 a 32) quando rimuovi la trasposizione non è dovuto a un errore nel codice, ma a due colli di bottiglia hardware precisi: lo spreco delle Cache Line e la saturazione del TLB.
-
-Per avere la certezza di padroneggiare queste dinamiche architetturali, ecco i tre concetti esatti che spiegano il fenomeno.
-
-1. L'Efficienza della Cache Line (Il problema dello spreco)
-Quando la CPU ha bisogno di un singolo double (8 byte) dalla RAM, non porta nella Cache L1 solo quel numero. Porta un intero blocco contiguo di 64 byte, chiamato Cache Line (ovvero 8 numeri double adiacenti).
-
-Nel caso CON Trasposizione (Stride-1): Il ciclo legge in orizzontale. La CPU carica una Cache Line con 8 numeri e il tuo codice li usa tutti e 8 in sequenza. L'efficienza spaziale è del 100%. Un blocco 64x64 entra in Cache in modo compatto e ogni singolo byte caricato è utile al calcolo.
-
-Nel caso SENZA Trasposizione (Stride-N): Il ciclo scorre la colonna in verticale. La CPU carica una Cache Line per darti b[k*N+j], ma tu ne usi solo 1. Gli altri 7 numeri caricati in Cache vengono ignorati, perché all'iterazione successiva il codice salta alla riga sotto. L'efficienza crolla al 12.5%.
-
-2. Il "Cache Thrashing" (Saturazione artificiale)
-A causa dello spreco appena visto, nel caso senza trasposizione la tua Cache L1 si riempie per l'87.5% di "spazzatura" (numeri adiacenti alla colonna che stai leggendo, ma che al momento non ti servono).
-
-Se tenti di usare un blocco grande (64x64), la quantità di queste Cache Line frammentate supera rapidamente la capacità fisica della L1. La Cache si riempie e la CPU è costretta a "sfrattare" continuamente dati utili per far spazio a quelli nuovi, rallentando enormemente il calcolo (Cache Thrashing).
-Riducendo il blocco a 32x32, dimezzi l'ingombro. Chiedi alla CPU una porzione di matrice sufficientemente piccola da poter "sopravvivere" all'interno della L1 nonostante l'enorme spreco di spazio causato dalla lettura verticale.
-
-3. La Pressione sul TLB (Il vero muro invisibile)
-La memoria RAM è divisa fisicamente dal sistema operativo in "Pagine" (solitamente da 4 KB ciascuna). La CPU possiede una micro-cache specializzata chiamata TLB (Translation Lookaside Buffer) che ricorda gli indirizzi fisici di queste pagine per non doverli ricalcolare ogni volta.
-
-Il problema è che il TLB è minuscolo (spesso può ricordare solo 64 pagine contemporaneamente).
-
-Con un blocco 64x64 senza trasposizione: Il ciclo salta su 64 righe distanti tra loro ad ogni passo. In una matrice grande, queste 64 righe si trovano quasi certamente su 64 Pagine di memoria diverse. Saturi il TLB all'istante. Ad ogni iterazione, il TLB fallisce (TLB Miss) e la CPU deve congelare il calcolo per interrogare la RAM e ricalcolare gli indirizzi.
-
-Con un blocco 32x32: Tocchi contemporaneamente solo 32 righe. Il TLB riesce a mantenere in memoria le 32 Pagine necessarie senza andare in affanno e la CPU non si ferma mai.
-
-In sintesi: la trasposizione ordina i dati così bene che la CPU riesce a digerire blocchi grandi (64x64). Senza trasposizione, il disordine in memoria è tale che devi "imboccare" la CPU con blocchi molto più piccoli (32x32) per evitare che si ingolfi.
-
-
-
-Ecco perché i due mondi si comportano in modo opposto:
-
-1. Caso Sequenziale: Il lusso della libertà (i-k-j)
-Quando scrivi codice sequenziale, c'è un solo core che lavora. Sei il padrone assoluto della matrice C e nessuno ti disturba. Questo ti regala una libertà fondamentale: puoi scegliere l'ordine dei cicli ottimale per l'hardware.
-
-Il vantaggio: Scegli l'ordine i-k-j. In questo ordine, il ciclo più interno è j. Ad ogni passo, C[i][j] e B[k][j] si muovono di una cella verso destra. Leggi e scrivi la RAM in orizzontale (Stride-1).
-
-Il risultato: La Cache L1 è sfruttata al 100%. Il processore è felice.
-
-Perché la trasposizione è un errore qui? Perché l'accesso in memoria è già perfetto. Fare una trasposizione costa milioni di operazioni al tuo singolo core solo per riordinare una matrice che la CPU stava già leggendo nel modo più efficiente possibile. È una "tassa" pagata per curare una malattia che non hai.
-
-2. Caso OpenMP: Il compromesso della concorrenza (i-j-k)
-Quando accendi OpenMP, scateni decine di thread sulla matrice. Se mantenessi l'ordine i-k-j e cercassi di parallelizzare i cicli in modo aggressivo (come con il Tiling estremo o il collapse), andresti incontro a un disastro: due thread potrebbero cercare di sommare i loro calcoli sulla stessa riga di C nello stesso istante, creando calcoli sbagliati (Race Condition).
-
-Per parallelizzare senza conflitti e distribuire il lavoro in modo millimetrico, sei costretto a cambiare l'ordine dei cicli in i-j-k.
-
-Il problema dell' i-j-k: In questo ordine, assegni a ogni thread una specifica cella C[i][j] da calcolare in totale isolamento (Prodotto Scalare). Il ciclo più interno diventa k.
-
-Il disastro hardware: Mentre k scorre, la lettura di B[k][j] avviene in verticale (colonna per colonna, Stride-N). Questo distrugge la Cache L1, causando continui Cache Miss e fermando la CPU in attesa della RAM.
-
-La Trasposizione come Salvezza: Per curare questo disastro, prima di iniziare il calcolo, i thread fanno una trasposizione parallela velocissima di B in B_T. Così, quando eseguono l'isolato prodotto scalare, leggeranno B_T[j][k], tornando a muoversi in perfetto orizzontale (Stride-1).
-
-Il Concetto in una frase
-Nel caso Sequenziale, hai la libertà di usare l'ordine i-k-j, che ha un accesso in memoria già perfetto, rendendo la trasposizione uno spreco inutile. In OpenMP, per evitare che i thread si contino i calcoli a vicenda, sei costretto a usare l'ordine i-j-k, che distrugge la Cache leggendo in verticale; la trasposizione è la cura necessaria per raddrizzare i dati e salvare le performance.
-
-
-
-
 ----------------------------------------------------------------------------------------------------------
 
-"L'architettura ibrida introduce un problema critico di Load Imbalance (sbilanciamento del carico). Se usiamo un banale #pragma omp parallel for e dividiamo le righe della matrice in 24 parti uguali, i 16 thread assegnati ai P-Cores finiranno il loro lavoro molto prima degli 8 thread assegnati agli E-Cores. I P-Cores rimarranno in idle (fermi a consumare corrente) aspettando che i core lenti finiscano, distruggendo l'efficienza parallela. Per risolvere questo problema, su CPU ibride è fondamentale usare uno scheduling dinamico in OpenMP (ad esempio schedule(dynamic)) in modo che i P-Cores, finendo prima, possano prendere in carico altre porzioni di matrice, bilanciando il lavoro asimmetrico dell'hardware."
+"L'architettura ibrida introduce un problema critico di Load Imbalance (sbilanciamento del carico). 
+Se usiamo un banale #pragma omp parallel for e dividiamo le righe della matrice in 24 parti uguali, 
+i 16 thread assegnati ai P-Cores finiranno il loro lavoro molto prima degli 8 thread assegnati agli E-Cores. 
+I P-Cores rimarranno in idle (fermi a consumare corrente) aspettando che i core lenti finiscano, distruggendo l'efficienza parallela. 
+Per risolvere questo problema, su CPU ibride è fondamentale usare uno scheduling dinamico in OpenMP (ad esempio schedule(dynamic)) in modo che i P-Cores, 
+finendo prima, possano prendere in carico altre porzioni di matrice, bilanciando il lavoro asimmetrico dell'hardware."
