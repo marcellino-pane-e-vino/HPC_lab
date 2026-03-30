@@ -17,9 +17,8 @@ int main(int argc, char **argv) {
     double * restrict a = (double *)aligned_alloc(64, N * N * sizeof(double));
     double * restrict b = (double *)aligned_alloc(64, N * N * sizeof(double));
     double * restrict c = (double *)aligned_alloc(64, N * N * sizeof(double));
-    // Allochiamo spazio per la matrice B trasposta
+    // Memory allocation for transposed B
     double * restrict b_t = (double *)aligned_alloc(64, N * N * sizeof(double));
-
 
     #pragma omp parallel //for collapse(2)
     for (int i = 0; i < N; i++) {
@@ -30,11 +29,10 @@ int main(int argc, char **argv) {
         }
     }
 
-    printf("Inizio calcolo con Trasposizione e Tiling...\n");
+    printf("Starting computation with transposition and tiling...\n");
     double start_time = omp_get_wtime();
 
-    // 1. TRASPOSIZIONE PARALLELA DI B
-    // Ci mette una frazione di secondo, ma ci salva la vita dopo.
+    // Parallel transposition of B
     #pragma omp parallel for collapse(2)
     for (int i = 0; i < N; i++) {
         for (int j = 0; j < N; j++) {
@@ -42,7 +40,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    // 2. MOLTIPLICAZIONE CON ACCESSO SEQUENZIALE
+    // Multiplication with sequential access
     #pragma omp parallel for schedule(static) collapse(2) 
     for (int ii = 0; ii < N; ii += BLOCK_SIZE) {
         for (int jj = 0; jj < N; jj += BLOCK_SIZE) {
@@ -55,11 +53,11 @@ int main(int argc, char **argv) {
                 for (int i = ii; i < i_end; i++) {
                     for (int j = jj; j < j_end; j++) {
                         
-                        // Accumulatore locale: tiene il parziale in un registro velocissimo!
+                        // Local accumulator: partial results inside a register
                         double sum = 0.0; 
                         
-                        // Ora sia A che B_T vengono lette linearmente (k aumenta)
-                        // Questo ciclo è un banale "Prodotto Scalare", icx lo vettorizza alla perfezione
+                        // A and B_T read linearly(k increases)
+                        // Simple "scalar product": icx vectorize it perfectly
                         //#pragma omp simd reduction(+:sum)
                         for (int k = kk; k < k_end; k++) {
                             sum += a[i * N + k] * b_t[j * N + k];
@@ -73,7 +71,7 @@ int main(int argc, char **argv) {
     }
     
     double end_time = omp_get_wtime();
-    printf("Tempo totale (inclusa trasposizione): %f secondi\n", end_time - start_time);
+    printf("Total time totale (transposition included): %f seconds\n", end_time - start_time);
 
     free(a); free(b); free(c); free(b_t);
     return 0;
