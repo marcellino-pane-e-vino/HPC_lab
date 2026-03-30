@@ -1,0 +1,19 @@
+Source,Flags,MatrixSize,Procs,Time_Seconds
+matrixmult_mpi_naive.c,-O3 -xHost,15000,9,33.351318
+matrixmult_mpi_opt.c,-O3 -xHost,15000,9,31.97236
+matrixmult_mpi_library.c,-O3 -xHost,15000,9,24.888906
+matrixmult_mpi_naive.c,-O3 -xHost,8000,9,5.445183
+matrixmult_mpi_opt.c,-O3 -xHost,8000,9,5.029446
+matrixmult_mpi_library.c,-O3 -xHost,8000,9,4.124575
+matrixmult_mpi_naive.c,-O3 -xHost,5000,9,1.505454
+matrixmult_mpi_opt.c,-O3 -xHost,5000,9,1.247886
+matrixmult_mpi_library.c,-O3 -xHost,5000,9,1.07056
+matrixmult_mpi_naive.c,-O3 -xHost,3000,9,0.371476
+matrixmult_mpi_opt.c,-O3 -xHost,3000,9,0.373616
+matrixmult_mpi_library.c,-O3 -xHost,3000,9,0.238711
+matrixmult_mpi_naive.c,-O3 -xHost,2000,9,0.131151
+matrixmult_mpi_opt.c,-O3 -xHost,2000,9,0.131495
+matrixmult_mpi_library.c,-O3 -xHost,2000,9,0.072426
+matrixmult_mpi_naive.c,-O3 -xHost,1000,9,0.022703
+matrixmult_mpi_opt.c,-O3 -xHost,1000,9,0.023199
+matrixmult_mpi_library.c,-O3 -xHost,1000,9,0.012462
