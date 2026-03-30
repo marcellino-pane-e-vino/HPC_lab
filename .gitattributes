@@ -4,6 +4,7 @@
 
 # Exclude all HTML files from the language statistics bar
 *.html linguist-detectable=false
+*.ipynb linguist-detectable=false
 
 # Optional: Exclude external libraries or generated results if needed
 # benchmark_results.csv linguist-documentation
