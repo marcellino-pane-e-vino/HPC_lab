@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
     double alpha = 1.0;
     double beta = 0.0;
 
-    // Because you compile with -qmkl=parallel, this function will automatically 
+    // Because we compile with -qmkl=parallel, this function will automatically 
     // spin up multiple threads via Intel's OpenMP runtime.
     cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 n, n, n,
