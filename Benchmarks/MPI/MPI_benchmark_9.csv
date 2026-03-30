@@ -17,6 +17,6 @@ matrixmult_mpi_library.c,-O3 -xHost,2000,9,0.072426
 matrixmult_mpi_naive.c,-O3 -xHost,1000,9,0.022703
 matrixmult_mpi_opt.c,-O3 -xHost,1000,9,0.023199
 matrixmult_mpi_library.c,-O3 -xHost,1000,9,0.012462
-matrixmult_mpi_naive.c,	-O3, -xHost,	10000,	9,	10.228123
-matrixmult_mpi_opt.c,	-O3, -xHost,	10000,	9,	10.194047
-matrixmult_mpi_library.c,	-O3, -xHost,	10000,	9,	7.341689
+matrixmult_mpi_naive.c,	-O3 -xHost,	10000,	9,	10.228123
+matrixmult_mpi_opt.c,	-O3 -xHost,	10000,	9,	10.194047
+matrixmult_mpi_library.c,	-O3 -xHost,	10000,	9,	7.341689
