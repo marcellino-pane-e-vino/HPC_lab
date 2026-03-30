@@ -20,7 +20,6 @@ int main(int argc, char **argv) {
   //double (*b)[n] = malloc(sizeof(double[n][n]));
   //double (*c)[n] = malloc(sizeof(double[n][n]));
 
-
   /********* IMPROVEMENT *********/
   // We get the exact memory needed requested by the matrix
   size_t bytes = sizeof(double[n][n]);
