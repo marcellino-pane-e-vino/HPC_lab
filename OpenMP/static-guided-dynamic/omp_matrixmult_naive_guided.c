@@ -6,7 +6,7 @@
 int main(int argc, char **argv) {
 
    if (argc < 3) {
-      printf("Errore: devi passare N e NUM_THREADS come argomenti!\n");
+      printf("Error: you must provide N and NUM_THREADS as arguments!\n");
       return 1;
   }
   
@@ -14,22 +14,19 @@ int main(int argc, char **argv) {
   int n = atoi(argv[1]);
   int num_threads = atoi(argv[2]);
   
-  // Imponiamo a OpenMP quanti thread usare per questo run
+  // We impose OpenMP how many threads to use for this run
   omp_set_num_threads(num_threads);
   
-  // Allocazione dinamica
   //double (*a)[n] = malloc(sizeof(double[n][n]));
   //double (*b)[n] = malloc(sizeof(double[n][n]));
   //double (*c)[n] = malloc(sizeof(double[n][n]));
 
-
   /********* IMPROVEMENT *********/
-  // 1. Calcoliamo la memoria esatta richiesta dalla matrice
+  // We get the exact memory needed requested by the matrix
   size_t bytes = sizeof(double[n][n]);
   
-  // 2. Arrotondiamo la dimensione al multiplo di 64 successivo
-  // (Requisito rigido dello standard C per aligned_alloc)
-  size_t aligned_bytes = (bytes + 63) & ~63;
+  //  We round the dimension as multiple of 64: strong requisite of standard C for aligned_alloc
+  // size_t aligned_bytes = (bytes + 63) & ~63;
 
   // 3. Allocazione con memoria allineata a 64-byte e puntatori "restrict"
   double (* restrict a)[n] = aligned_alloc(64, aligned_bytes);
