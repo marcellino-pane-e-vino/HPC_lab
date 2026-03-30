@@ -26,21 +26,19 @@ int main(int argc, char **argv) {
   size_t bytes = sizeof(double[n][n]);
   
   //  We round the dimension as multiple of 64: strong requisite of standard C for aligned_alloc
-  // size_t aligned_bytes = (bytes + 63) & ~63;
+  size_t aligned_bytes = (bytes + 63) & ~63;
 
-  // 3. Allocazione con memoria allineata a 64-byte e puntatori "restrict"
+  // Aligned memory allocation to 64-byte and "restrict" pointers
   double (* restrict a)[n] = aligned_alloc(64, aligned_bytes);
   double (* restrict b)[n] = aligned_alloc(64, aligned_bytes);
   double (* restrict c)[n] = aligned_alloc(64, aligned_bytes);
 
-
-
   if (!a || !b || !c) {
-      printf("Errore: Memoria insufficiente per N=%d!\n", n);
+      printf("Error: insufficient memory for N=%d!\n", n);
       return 1;
   }
 
-  printf("Inizializzazione parallela con %d thread...\n", num_threads);
+  printf("Parallel inizialization with %d threads...\n", num_threads);
   
   #pragma omp parallel for
   for (int i = 0; i < n; i++) {
@@ -55,12 +53,12 @@ int main(int argc, char **argv) {
   
   double start_time = omp_get_wtime(); 
 
-  // Qui gestiamo i thread sui vari core
+  // Here we handle the threads accross the cores
   #pragma omp parallel for schedule(guided)
   for (int i = 0; i < n; ++i) {
      for (int k = 0; k < n; k++) {
         
-        // Qui forziamo la vettorizzazione SIMD all'interno del singolo core!
+        // We force SIMD vectorization inside each core
         //#pragma omp simd
         for (int j = 0; j < n; ++j) {
            c[i][j] += a[i][k] * b[k][j];
@@ -70,7 +68,7 @@ int main(int argc, char **argv) {
 
   double end_time = omp_get_wtime(); 
 
-  printf("Tempo di esecuzione OpenMP: %f secondi\n", end_time - start_time);
+  printf("OpenMP execution time: %f seconds\n", end_time - start_time);
 
   FILE *f = fopen("mat-res.txt", "w");
   if (!f) {
