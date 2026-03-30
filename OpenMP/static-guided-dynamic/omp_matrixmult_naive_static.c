@@ -17,7 +17,6 @@ int main(int argc, char **argv) {
   //  We fix the number of threads to be used
   omp_set_num_threads(num_threads);
   
-  // Allocazione dinamica
   //double (*a)[n] = malloc(sizeof(double[n][n]));
   //double (*b)[n] = malloc(sizeof(double[n][n]));
   //double (*c)[n] = malloc(sizeof(double[n][n]));
