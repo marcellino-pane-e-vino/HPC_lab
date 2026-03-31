@@ -1,79 +1,51 @@
-Che metriche mettiamo??
+# Performance Optimization and Scaling of Large-Scale Matrix Multiplication
 
-In un report accademico o professionale che documenti la parallelizzazione o l'ottimizzazione di un programma, è fondamentale presentare una combinazione di metriche di tempo, efficienza e utilizzo delle risorse hardware per giustificare le scelte implementative e analizzare il comportamento del codice.
-Di seguito sono elencate le metriche e i calcoli di confronto principali estratti dalle fonti:
-1. Metriche Core di Performance Parallela
-Queste metriche definiscono quanto bene il programma scala all'aumentare delle risorse computazionali (p processori/core):
+[cite_start]This project analyzes the optimization and parallelization of square matrix multiplication ($n \times n$), addressing the **Memory Wall** challenge across different architectures and programming paradigms[cite: 13, 16, 20].
 
-    - Speedup (Aumento di velocità):Calcolo: S(n,p)=T(n,p)T(n,1)​
-    - Efficienza: Misura la frazione di tempo in cui le risorse sono utilizzate produttivamente
-    - Calcolo: E(n,p)=pS(n,p)​
-    - Analisi della Scalabilità (strong vs weak scaling)
-    - Metriche di Throughput e Calcolo Astratte (GFLOPS / TFLOPS)
-    - Intensità Aritmetica: Il rapporto tra operazioni in virgola mobile eseguite e byte trasferiti dalla memoria
-    - Roofline
-        .
+## Objectives
+[cite_start]The primary goal is the transformation of a baseline sequential algorithm into a suite of high-performance implementations[cite: 18]. [cite_start]Results are validated through comparison with industry-standard libraries (CBLAS, ScaLAPACK, cuBLAS) and analyzed using the **Roofline Model**[cite: 63, 1107].
 
-4. Analisi dell'Efficienza Hardware (Micro-architettura)
-Per ottimizzazioni come la vectorization o l'ottimizzazione della cache, dovresti riportare:
+## Paradigms and Implemented Techniques
 
-    Cache Miss Ratio: La percentuale di accessi alla memoria che non trovano i dati nella cache (L1, L2 o L3)
+### 1. Sequential Optimization (CPU)
+* [cite_start]**Loop Tiling**: Partitioning matrices into $B \times B$ tiles to maximize temporal cache locality[cite: 162, 163].
+* [cite_start]**Register Promotion**: Using scalar variables to force the use of CPU registers and reduce redundant cache reads[cite: 296, 297].
+* [cite_start]**Memory Alignment**: Allocation via `aligned_alloc` (64-byte) to ensure optimal data loading for AVX2 SIMD instructions[cite: 197, 208, 209].
 
-. Un calo drastico dei miss indica un'ottima località dei dati
-.
-TLB Miss Rate: Fondamentale quando si lavora con set di dati molto grandi (working set) che eccedono la memoria cache, causando costose traduzioni di indirizzi virtuali
-.
-CPI (Cycles Per Instruction): Numero medio di cicli di clock per istruzione. Un CPI alto può indicare stalli dovuti all'attesa della memoria o dipendenze tra i dati
-.
-Utilizzo della Banda (Bandwidth utilization): Byte per ciclo o GB/s trasferiti, confrontati con la capacità massima del Front Side Bus (FSB) o dell'interconnessione
+### 2. Shared Memory (OpenMP)
+* [cite_start]**Parallelization**: Workload distribution across 24 logical threads using the fork-join model[cite: 30, 392].
+* [cite_start]**Scheduling Analysis**: Comparison of *Static*, *Dynamic*, and *Guided* policies to optimize load balancing[cite: 437, 438].
+* [cite_start]**Loop Collapse**: Fusing iteration spaces to increase available parallelism and ensure thread saturation[cite: 418, 419, 421].
 
-    .
+### 3. Distributed Memory (MPI)
+* [cite_start]**SUMMA Algorithm**: Implementation of the *Scalable Universal Matrix Multiplication Algorithm* using a 2D process grid[cite: 593, 594].
+* [cite_start]**Communication Optimization**: Utilization of Cartesian row-exclusive and column-exclusive communicators for targeted panel broadcasts[cite: 598, 600].
 
-5. Metriche Economiche e di Sostenibilità (HPC Professionale)
-In report professionali, è spesso richiesto il calcolo del Total Cost of Ownership (TCO)
-:
+### 4. Heterogeneous Computing (CUDA)
+* [cite_start]**2D Register Tiling**: A multi-level memory hierarchy strategy (Shared Memory and Registers) to overcome the global memory bottleneck[cite: 920, 921].
+* [cite_start]**Memory Vectorization**: Using the `float4` data type to enable 128-bit memory transactions[cite: 943, 945].
+* [cite_start]**Precision Shift**: Transitioning to single-precision (FP32) to fully exploit the hardware resources of the Turing microarchitecture[cite: 816, 819].
 
-    Performance/Prezzo: Ad esempio, MFLOPS per dollaro (MFLOPS/US$). Serve a dimostrare che l'ottimizzazione software ha reso l'investimento hardware più redditizio
+## Performance Analysis (N = 10000)
+[cite_start]Benchmarks were conducted on an **Intel i9-12900K** (24 threads) and an **NVIDIA Tesla T4**[cite: 25, 808].
 
-.
-Costi Energetici: Consumo in KWatt e impronta di CO2 del calcolo, poiché i costi energetici nel ciclo di vita di un supercomputer possono eguagliare i costi di acquisto
+| Paradigm | Implementation | Execution Time (s) | GFLOPS | Speedup |
+| :--- | :--- | :--- | :--- | :--- |
+| **Sequential** | Naive Baseline | 76.98 | 25.98 | 1.00x |
+| **Sequential** | Optimized (Tiling) | 44.37 | 45.07 | 1.73x |
+| **OpenMP** | Optimized (24 Thr) | 6.63 | 301.66 | 11.61x |
+| **MPI** | SUMMA (25 Proc) | 7.71 | 259.40 | 9.98x |
+| **CUDA** | **Custom float4** | **0.45** | **4444.44** | **171.07x** |
+| **CUDA** | **cuBLAS Library** | **0.44** | **4545.45** | **174.95x** |
 
-    .
+[cite_start]*[Data source: Table 26 and Section 6.5 of the project report]* [cite: 1107]
 
-6. Leggi Teoriche di Confronto
+## Technical Setup
+* [cite_start]**Compilers**: `icx` (Intel OneAPI), `nvcc` (NVIDIA CUDA Compiler), `mpiicc`[cite: 61, 62].
+* [cite_start]**Libraries**: OpenBLAS (CBLAS), ScaLAPACK, cuBLAS[cite: 216, 678, 932].
+* [cite_start]**Hardware**: HP Z2 Tower G9 (CPU) and NVIDIA Tesla T4 (GPU)[cite: 25, 808].
 
-    Legge di Amdahl: Usala per calcolare lo speedup massimo teorico basandoti sulla frazione seriale del codice (s). Se il 10% del codice è seriale, lo speedup non supererà mai 10, indipendentemente dal numero di core
-
-    .
-
-Desideri che ti aiuti a creare una struttura dettagliata per il report, includendo come visualizzare graficamente queste metriche?
-
-
-
---------------
-Intel Advisor: 
-
-1- Trovare percorso a intel advisor:
-
-find /opt/intel -name "advixe-vars.sh" 2>/dev/null dovrebbe dare come output: 
-/opt/intel/oneapi/advisor/2023.2.0/advixe-vars.sh
-
-
-2- icx -g -qopenmp -xHost -O3 -lm matrixmult_opt.c -o matrixmult_opt
-
-
-3- advixe-cl --collect survey --project-dir ./progetto_advisor -- ./matrixmult_opt
-
-
-4- advixe-cl --collect tripcounts --project-dir ./progetto_advisor -- ./matrixmult_opt
-
-
-5- advixe-cl --collect roofline --project-dir ./progetto_advisor -- ./matrixmult_opt
-
-
-6- advixe-cl --report roofline --project-dir ./progetto_advisor --report-output=./report_finale.html
-
-
-poi aprire con Google =)
+---
+[cite_start]**Authors**: Luca Barbati, Wassim Fatnassi, Roberto Lazzarini[cite: 4, 5].
 
 
