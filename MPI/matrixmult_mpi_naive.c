@@ -42,17 +42,6 @@ int main(int argc, char **argv) {
     MPI_Scatterv(a, sendcounts, displs, MPI_DOUBLE, 
                  local_a, rows_per_proc * n, MPI_DOUBLE, 
                  0, MPI_COMM_WORLD);
-/*
-    // 4. Local computation
-    for (int i = 0; i < rows_per_proc; i++) {
-        for (int j = 0; j < n; j++) {
-            local_c[i * n + j] = 0;
-            for (int k = 0; k < n; k++) {
-                local_c[i * n + j] += local_a[i * n + k] * b[k * n + j];
-            }
-        }
-    }
-*/
 
     // 4. Local computation
     for (int i = 0; i < rows_per_proc; i++) {
@@ -63,6 +52,7 @@ int main(int argc, char **argv) {
             }
         }
     }
+    
     // 5. Gather + output
     MPI_Gatherv(local_c, rows_per_proc * n, MPI_DOUBLE, 
                 c, sendcounts, displs, MPI_DOUBLE, 
