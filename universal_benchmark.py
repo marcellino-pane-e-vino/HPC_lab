@@ -13,12 +13,10 @@ import datetime
 # ==========================================================
 # ======================== CONFIG ==========================
 # ==========================================================
-
 OUTPUT_FOLDER = Path("test_di_oggi")
 
 REPETITIONS = 3  
 
-# Concept: Allow 'None' in threads so sequential programs only get 1 argument (size)
 PARAMETERS = {
     "program": [
     # ---- sequential zone ----
@@ -42,7 +40,6 @@ PARAMETERS = {
 # ==========================================================
 # ====================== UTILITIES =========================
 # ==========================================================
-
 class Logger:
     @staticmethod
     def _ts(): return datetime.datetime.now().strftime("%H:%M:%S")
@@ -74,11 +71,7 @@ class StepTimer:
         else:
             Logger.error(f"FAILED   : {self.desc} ({elapsed:.2f}s)")
 
-def load_intel_environment():
-    """
-    Concept: Run setvars.sh once and absorb the environment into Python.
-    This entirely removes the need for messy bash wrappers during compilation.
-    """
+def load_intel_environment(): # loads setvars when needed
     if "CMPLR_ROOT" in os.environ:
         return # Already loaded
 
@@ -97,7 +90,6 @@ def load_intel_environment():
 # ==========================================================
 # ===================== CORE CLASSES =======================
 # ==========================================================
-
 class SystemDefs:
     ALIASES = {
         "OPT_O3": {"gcc": ["-O3"], "icc": ["-O3"], "icx": ["-O3"]},
@@ -284,11 +276,7 @@ class Executor:
         Logger.success(f"Average Runtime over {repetitions} runs: {mean_runtime:.4f}s")
         return mean_runtime
 
-# ==========================================================
-# =================== FILENAME BUILDER =====================
-# ==========================================================
 class BenchmarkFilenameBuilder:
-
     def __init__(self, params):
         self.params = params
 
@@ -340,10 +328,6 @@ class BenchmarkFilenameBuilder:
 
         return "_".join(parts) + ".csv"
 
-# ==========================================================
-# ======================= PIPELINE =========================
-# ==========================================================
-
 class BenchmarkPipeline:
     def __init__(self, parameters, output_folder):
         self.params = parameters
@@ -361,7 +345,6 @@ class BenchmarkPipeline:
         return completed
 
     def _build_csv_key(self, combo):
-        # Concept: Ensure every element is a string to match CSV readouts perfectly
         return tuple(str(combo[k]) for k in self.params.keys())
 
     def _ask_output_filename(self):
@@ -384,7 +367,6 @@ class BenchmarkPipeline:
 
     def run(self):
         self._ask_output_filename()
-
         self.completed_runs = self._load_cache()
 
         keys, values = list(self.params.keys()), list(self.params.values())
@@ -422,8 +404,10 @@ class BenchmarkPipeline:
 
         Logger.success(f"Pipeline complete. Results saved to {self.csv_path}")
 
-
+# ==========================================================
+# ======================== MAIN ===========================
+# ==========================================================
 if __name__ == "__main__":
-    load_intel_environment()
+    load_intel_environment() # loads setvars when needed
     pipeline = BenchmarkPipeline(PARAMETERS, OUTPUT_FOLDER)
     pipeline.run()
