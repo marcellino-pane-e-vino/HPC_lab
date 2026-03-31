@@ -1,4 +1,0 @@
-Source,Flags,MatrixSize,Procs,Time_Seconds
-matrixmult_mpi_naive.c,"-O3 -xHost",1000,25,0.025156
-matrixmult_mpi_opt.c,"-O3 -xHost",1000,25,0.016942
-matrixmult_mpi_library.c,"-O3 -xHost",1000,25,0.012015
