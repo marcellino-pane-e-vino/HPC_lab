@@ -1,9 +1,11 @@
+#define NB 64
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include <mpi.h>
 
-// ScaLAPACK / BLACS / tools
+// 0. ScaLAPACK / BLACS / tools
 extern void descinit_(int*, int*, int*, int*, int*, int*, int*, int*, int*, int*);
 extern void pdgemm_(char*, char*, int*, int*, int*, double*, double*, int*, int*, int*, double*, int*, int*, int*, double*, double*, int*, int*, int*);
 extern void Cblacs_pinfo(int*, int*);
@@ -14,6 +16,7 @@ extern void Cblacs_gridexit(int);
 extern int numroc_(int*, int*, int*, int*, int*);
 
 int main(int argc, char **argv) {
+    // 1. INITIALIZATION + LOAD BALANCING
     int rank, size, n;
     int i_zero = 0, i_one = 1;
     double d_one = 1.0, d_zero = 0.0;
@@ -21,7 +24,7 @@ int main(int argc, char **argv) {
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
-
+#define NB 64
     n = (argc < 2) ? 1024 : atoi(argv[1]);
 
     if (n <= 0) {
@@ -30,30 +33,25 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // ==========================================
-    // 1. BLACS GRID (robust: near-square)
-    // ==========================================
+    // building 2d grid (BLACS)
     int icontext, myrow, mycol;
     int nprow = (int)sqrt((double)size);
     while (size % nprow != 0) nprow--;
     int npcol = size / nprow;
-
     Cblacs_pinfo(&rank, &size);
     Cblacs_get(-1, 0, &icontext);
     Cblacs_gridinit(&icontext, "Row-major", nprow, npcol);
     Cblacs_gridinfo(icontext, &nprow, &npcol, &myrow, &mycol);
 
-    // ==========================================
-    // 2. DESCRIPTORS
-    // ==========================================
+    // building descriptors who encode matrices as block-cyclic
     int descA[9], descB[9], descC[9], info;
-    int nb = 64;
+    int nb = NB;  // local alias needed to pass NB by pointer to Fortran routines //cannot use a constant because of how Fortan interops with C
 
     int local_rows = numroc_(&n, &nb, &myrow, &i_zero, &nprow);
     int local_cols = numroc_(&n, &nb, &mycol, &i_zero, &npcol);
-
     int lld = (local_rows > 1) ? local_rows : 1;
-
+    
+    // filling descriptors
     descinit_(descA, &n, &n, &nb, &nb, &i_zero, &i_zero, &icontext, &lld, &info);
     descinit_(descB, &n, &n, &nb, &nb, &i_zero, &i_zero, &icontext, &lld, &info);
     descinit_(descC, &n, &n, &nb, &nb, &i_zero, &i_zero, &icontext, &lld, &info);
@@ -63,9 +61,7 @@ int main(int argc, char **argv) {
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
 
-    // ==========================================
-    // 3. MEMORY ALLOCATION
-    // ==========================================
+    // 2. MEMORY ALLOCATION
     size_t local_elems = (size_t)local_rows * local_cols;
 
     double *local_a = (double *)malloc(local_elems * sizeof(double));
@@ -77,41 +73,14 @@ int main(int argc, char **argv) {
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
 
-    // ==========================================
-    // 4. STATIC / NAIVE INITIALIZATION (DEFAULT)
-    // ==========================================
-    // In practice, with ScaLAPACK storage, each process still initializes only
-    // its own local buffer. But conceptually this is the "static matrix" case:
-    // every entry of the global matrix A is 2.0, every entry of B is 3.0,
-    // and C starts from 0.0.
+    // parallel initialization (could only be performed for constant matrices)
     for (size_t i = 0; i < local_elems; i++) {
         local_a[i] = 2.0;
         local_b[i] = 3.0;
         local_c[i] = 0.0;
     }
 
-    /*
-    // ==========================================
-    // 4.b LOCAL / DISTRIBUTED INITIALIZATION IDEA (COMMENTED OUT)
-    // ==========================================
-    // This is where you would put a true local/distributed initialization based
-    // on the global coordinates owned by each rank.
-    //
-    // Example sketch:
-    //
-    // for each local entry (li, lj):
-    //     compute corresponding global indices (gi, gj)
-    //     local_a[local_index] = f(gi, gj);
-    //     local_b[local_index] = g(gi, gj);
-    //     local_c[local_index] = 0.0;
-    //
-    // That path is more general, but for this benchmark we keep the default
-    // initialization explicitly static and uniform.
-    */
-
-    // ==========================================
-    // 5. COMPUTATION
-    // ==========================================
+    // 4. COMPUTATION
     MPI_Barrier(MPI_COMM_WORLD);
     double start = MPI_Wtime();
 
@@ -124,9 +93,7 @@ int main(int argc, char **argv) {
     MPI_Barrier(MPI_COMM_WORLD);
     double end = MPI_Wtime();
 
-    // ==========================================
-    // 6. OUTPUT
-    // ==========================================
+    // 5. OUTPUT
     if (rank == 0) {
         printf("--------------------------------------\n");
         printf("Libreria: ScaLAPACK (pdgemm)\n");
@@ -137,9 +104,7 @@ int main(int argc, char **argv) {
         printf("--------------------------------------\n");
     }
 
-    // ==========================================
-    // CLEANUP
-    // ==========================================
+    // 6. CLEANUP
     free(local_a);
     free(local_b);
     free(local_c);

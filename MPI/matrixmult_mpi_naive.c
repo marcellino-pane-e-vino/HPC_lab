@@ -3,14 +3,14 @@
 #include <mpi.h>
 
 int main(int argc, char **argv) {
-    // 1. Initialization
+    // 1. INITIALIZATION
     int rank, size, n;
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     if (argc < 2) n = 1000; else n = atoi(argv[1]);
 
-    // 1.5 Load balancing
+    // 1.5 LOAD BALANCING
     int remainder = n % size; 
     int rows_per_proc = (n / size) + (rank < remainder ? 1 : 0); 
     int *sendcounts = malloc(size * sizeof(int));
@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
         current_displ += sendcounts[i]; // Update offset for the next rank
     }
 
-    // 2. Memory allocation
+    // 2. MEMORY ALLOCATION
     double *local_a = malloc(rows_per_proc * n * sizeof(double));
     double *local_c = malloc(rows_per_proc * n * sizeof(double));
     double *b = malloc(n * n * sizeof(double));
@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
         for (int i = 0; i < n * n; i++) { a[i] = 2.0; b[i] = 3.0; }
     }
 
-    // 3. Synchronization and distribution
+    // 3. SYNCHRONIZATION AND DISTRIBUTION
     MPI_Barrier(MPI_COMM_WORLD); 
     double start = MPI_Wtime(); 
     MPI_Bcast(b, n * n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
                  local_a, rows_per_proc * n, MPI_DOUBLE, 
                  0, MPI_COMM_WORLD);
 
-    // 4. Local computation
+    // 4. LOCAL COMPUTATION
     for (int i = 0; i < rows_per_proc; i++) {
         for (int k = 0; k < n; k++) {
             double temp = local_a[i * n + k];
@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
         }
     }
     
-    // 5. Gather + output
+    // 5. GATHER + OUTPUT
     MPI_Gatherv(local_c, rows_per_proc * n, MPI_DOUBLE, 
                 c, sendcounts, displs, MPI_DOUBLE, 
                 0, MPI_COMM_WORLD);
@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
         free(a); free(c);
     }
 
-    // 6. Cleanup
+    // 6. CLEANUP
     free(sendcounts);
     free(displs); 
     free(local_a); 

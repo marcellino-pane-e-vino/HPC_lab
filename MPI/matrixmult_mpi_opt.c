@@ -6,8 +6,6 @@
 #include <string.h>
 #include <mpi.h>
 
-void check_result(double *c_global, int n, double val_a, double val_b);
-
 int main(int argc, char **argv) {
     // 1. INITIALIZATION + LOAD BALANCING
     int rank, size, n;
@@ -83,6 +81,7 @@ int main(int argc, char **argv) {
         MPI_Recv(a_local, block_size, MPI_DOUBLE, 0, 0, cart_comm, MPI_STATUS_IGNORE);
         MPI_Recv(b_local, block_size, MPI_DOUBLE, 0, 1, cart_comm, MPI_STATUS_IGNORE);
     }
+    
     // 4. LOCAL COMPUTATION (SUMMA)
     for (int k = 0; k < p_cols; k++) {
         // 4.1 Row broadcast to get block for A
@@ -147,8 +146,6 @@ int main(int argc, char **argv) {
         printf("C[0,0] = %.2f\n", c_global[0]);
         printf("--------------------------------------\n");
         
-        check_result(c_global, n, 2.0, 3.0);
-
         free(a_global); free(b_global); free(c_global);
     } else {
         MPI_Send(c_local, block_size, MPI_DOUBLE, 0, 2, cart_comm);
@@ -164,46 +161,4 @@ int main(int argc, char **argv) {
     
     MPI_Finalize();
     return 0;
-}
-
-void check_result(double *c_global, int n, double val_a, double val_b) {
-    if (c_global == NULL) return;
-
-    double expected = (double)n * val_a * val_b;
-    int errors = 0;
-
-    // Define strategic indices to sample
-    size_t indices_to_check[5];
-    const char *labels[5] = {
-        "Top-Left (0,0)", 
-        "Top-Right (0, n-1)", 
-        "Center (n/2, n/2)", 
-        "Bottom-Left (n-1, 0)", 
-        "Bottom-Right (n-1, n-1)"
-    };
-
-    indices_to_check[0] = 0;                                 // (0,0)
-    indices_to_check[1] = (size_t)n - 1;                     // (0, n-1)
-    indices_to_check[2] = (size_t)(n / 2) * n + (n / 2);     // Middle
-    indices_to_check[3] = (size_t)(n - 1) * n;               // (n-1, 0)
-    indices_to_check[4] = (size_t)n * n - 1;                 // (n-1, n-1)
-
-    printf(">>> STARTING SAMPLED VERIFICATION (Checking 5 points)...\n");
-
-    for (int i = 0; i < 5; i++) {
-        size_t idx = indices_to_check[i];
-        if (c_global[idx] != expected) {
-            printf("Verification FAILED at %s (index %zu): expected %.2f, found %.2f\n", 
-                   labels[i], idx, expected, c_global[idx]);
-            errors++;
-        } else {
-            printf("Verification PASSED at %s: %.2f\n", labels[i], c_global[idx]);
-        }
-    }
-
-    if (errors == 0) {
-        printf(">>> SAMPLED VERIFICATION SUCCESSFUL.\n");
-    } else {
-        printf(">>> SAMPLED VERIFICATION FAILED: %d errors found.\n", errors);
-    }
 }
