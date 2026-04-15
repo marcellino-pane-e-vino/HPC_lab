@@ -10,9 +10,7 @@ from pathlib import Path
 from itertools import product
 import datetime
 
-# ==========================================================
-# ======================== CONFIG ==========================
-# ==========================================================
+# CONFIG 
 OUTPUT_FOLDER = Path("test_di_oggi")
 
 REPETITIONS = 3  
@@ -37,9 +35,7 @@ PARAMETERS = {
     ]
 }
 
-# ==========================================================
-# ====================== UTILITIES =========================
-# ==========================================================
+# UTILITIES 
 class Logger:
     @staticmethod
     def _ts(): return datetime.datetime.now().strftime("%H:%M:%S")
@@ -87,9 +83,7 @@ def load_intel_environment(): # loads setvars when needed
     except Exception as e:
         Logger.error("Failed to load Intel environment.")
 
-# ==========================================================
-# ===================== CORE CLASSES =======================
-# ==========================================================
+# CORE CLASSES
 class SystemDefs:
     ALIASES = {
         "OPT_O3": {"gcc": ["-O3"], "icc": ["-O3"], "icx": ["-O3"]},
@@ -404,9 +398,7 @@ class BenchmarkPipeline:
 
         Logger.success(f"Pipeline complete. Results saved to {self.csv_path}")
 
-# ==========================================================
-# ======================== MAIN ===========================
-# ==========================================================
+# MAIN
 if __name__ == "__main__":
     load_intel_environment() # loads setvars when needed
     pipeline = BenchmarkPipeline(PARAMETERS, OUTPUT_FOLDER)
