@@ -1,22 +1,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// mkl.h replaces cblas.h. It provides the highly optimized, 
-// multi-threaded Intel MKL implementation of cblas_dgemm.
+// Necessary libraries
 #include <mkl.h>    
-
-// omp.h is required for omp_get_wtime(), which measures real "wall-clock" time 
-// rather than CPU time (which inflates when using multiple threads).
 #include <omp.h>    
 
 int main(int argc, char **argv) {
+
     if (argc < 2) {
         fprintf(stderr, "Error: missing n argument.\n");
-        fprintf(stderr, "Usage: %s <n>\n", argv[0]);
         return 1;
     }
 
     int n = atoi(argv[1]);
+
     if (n <= 0) {
         fprintf(stderr, "Error: You forgot to provide n!.\n");
         return 1;
@@ -24,6 +21,7 @@ int main(int argc, char **argv) {
 
     int i, j;
 
+    // Memory allocation
     double (*a)[n] = malloc(sizeof(double[n][n]));
     double (*b)[n] = malloc(sizeof(double[n][n]));
     double (*c)[n] = malloc(sizeof(double[n][n]));
@@ -41,19 +39,16 @@ int main(int argc, char **argv) {
             c[i][j] = 0.0;
         }
     }
-
-    printf("Starting the computation with MKL Parallel...\n");
     
-    // START TIMER: Using OpenMP wall-clock time
+    // Timer
     double start = omp_get_wtime();
+    printf("Starting the computation...\n");
 
-    // Use BLAS library: cblas_dgemm
-    // C = alpha * A * B + beta * C
+    // Parameters settings - C = alpha * A * B + beta * C
     double alpha = 1.0;
     double beta = 0.0;
 
-    // Because we compile with -qmkl=parallel, this function will automatically 
-    // spin up multiple threads via Intel's OpenMP runtime.
+    // Matrix multiplication through CBLAS library
     cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 n, n, n,
                 alpha,
@@ -62,17 +57,14 @@ int main(int argc, char **argv) {
                 beta,
                 &c[0][0], n);
 
-    // END TIMER
     double end = omp_get_wtime();
     double duration = end - start;
-    
-    printf("Execution Time (Wall-Clock): %.4f seconds\n", duration);
+    printf("Execution Time: %.4f seconds\n", duration);
 
+    
     FILE *f = fopen("mat-res.txt", "w");
     if (!f) {
         perror("fopen");
-        // Free memory before exiting on error
-        free(a); free(b); free(c);
         return 1;
     }
 
@@ -86,6 +78,7 @@ int main(int argc, char **argv) {
 
     fclose(f);
 
+    // Memory deallocation
     free(a);
     free(b);
     free(c);
